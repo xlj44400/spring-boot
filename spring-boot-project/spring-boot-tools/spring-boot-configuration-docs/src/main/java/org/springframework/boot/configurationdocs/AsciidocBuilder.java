@@ -23,33 +23,28 @@ package org.springframework.boot.configurationdocs;
  */
 class AsciidocBuilder {
 
-	private static final String NEWLINE = System.lineSeparator();
-
 	private final StringBuilder content;
 
 	AsciidocBuilder() {
 		this.content = new StringBuilder();
 	}
 
-	public AsciidocBuilder appendKey(Object... items) {
+	AsciidocBuilder appendKey(Object... items) {
 		for (Object item : items) {
-			append("`+", item, "+` +", NEWLINE);
+			appendln("`+", item, "+` +");
 		}
 		return this;
 	}
 
-	public AsciidocBuilder newLine() {
-		append(NEWLINE);
-		return this;
+	AsciidocBuilder newLine() {
+		return append(System.lineSeparator());
 	}
 
-	public AsciidocBuilder appendln(Object... items) {
-		append(items);
-		append(NEWLINE);
-		return this;
+	AsciidocBuilder appendln(Object... items) {
+		return append(items).newLine();
 	}
 
-	public AsciidocBuilder append(Object... items) {
+	AsciidocBuilder append(Object... items) {
 		for (Object item : items) {
 			this.content.append(item);
 		}

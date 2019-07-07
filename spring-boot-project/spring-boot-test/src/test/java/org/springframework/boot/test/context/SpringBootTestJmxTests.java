@@ -16,7 +16,7 @@
 
 package org.springframework.boot.test.context;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -33,21 +33,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DirtiesContext
 @SpringBootTest
-public class SpringBootTestJmxTests {
+class SpringBootTestJmxTests {
 
 	@Value("${spring.jmx.enabled}")
 	private boolean jmx;
 
 	@Test
-	public void disabledByDefault() {
+	void disabledByDefault() {
 		assertThat(this.jmx).isFalse();
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	protected static class Config {
+	static class Config {
 
 		@Bean
-		public static PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
+		static PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
 			return new PropertySourcesPlaceholderConfigurer();
 		}
 

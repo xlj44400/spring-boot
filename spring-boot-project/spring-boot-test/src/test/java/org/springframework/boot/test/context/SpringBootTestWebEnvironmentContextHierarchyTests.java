@@ -16,8 +16,7 @@
 
 package org.springframework.boot.test.context;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.AbstractSpringBootTestWebServerWebEnvironmentTests.AbstractConfig;
@@ -29,7 +28,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.ContextHierarchy;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
@@ -44,32 +42,30 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  */
 @DirtiesContext
-@SpringBootTest(webEnvironment = WebEnvironment.DEFINED_PORT,
-		properties = { "server.port=0", "value=123" })
+@SpringBootTest(webEnvironment = WebEnvironment.DEFINED_PORT, properties = { "server.port=0", "value=123" })
 @ContextHierarchy({ @ContextConfiguration(classes = ParentConfiguration.class),
 		@ContextConfiguration(classes = ChildConfiguration.class) })
-@RunWith(SpringRunner.class)
-public class SpringBootTestWebEnvironmentContextHierarchyTests {
+class SpringBootTestWebEnvironmentContextHierarchyTests {
 
 	@Autowired
 	private ApplicationContext context;
 
 	@Test
-	public void testShouldOnlyStartSingleServer() {
+	void testShouldOnlyStartSingleServer() {
 		ApplicationContext parent = this.context.getParent();
 		assertThat(this.context).isInstanceOf(WebApplicationContext.class);
 		assertThat(parent).isNotInstanceOf(WebApplicationContext.class);
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	protected static class ParentConfiguration extends AbstractConfig {
+	static class ParentConfiguration extends AbstractConfig {
 
 	}
 
 	@Configuration(proxyBeanMethods = false)
 	@EnableWebMvc
 	@RestController
-	protected static class ChildConfiguration extends AbstractConfig {
+	static class ChildConfiguration extends AbstractConfig {
 
 	}
 

@@ -18,6 +18,9 @@ package org.springframework.boot.autoconfigure.web.reactive.function.client;
 
 import java.util.function.Function;
 
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -51,10 +54,8 @@ class ClientHttpConnectorConfiguration {
 		}
 
 		@Bean
-		public ReactorClientHttpConnector reactorClientHttpConnector(
-				ReactorResourceFactory reactorResourceFactory) {
-			return new ReactorClientHttpConnector(reactorResourceFactory,
-					Function.identity());
+		public ReactorClientHttpConnector reactorClientHttpConnector(ReactorResourceFactory reactorResourceFactory) {
+			return new ReactorClientHttpConnector(reactorResourceFactory, Function.identity());
 		}
 
 	}
@@ -71,10 +72,10 @@ class ClientHttpConnectorConfiguration {
 		}
 
 		@Bean
-		public JettyClientHttpConnector jettyClientHttpConnector(
-				JettyResourceFactory jettyResourceFactory) {
-			return new JettyClientHttpConnector(jettyResourceFactory, (httpClient) -> {
-			});
+		public JettyClientHttpConnector jettyClientHttpConnector(JettyResourceFactory jettyResourceFactory) {
+			SslContextFactory sslContextFactory = new SslContextFactory.Client();
+			HttpClient httpClient = new HttpClient(sslContextFactory);
+			return new JettyClientHttpConnector(httpClient, jettyResourceFactory);
 		}
 
 	}

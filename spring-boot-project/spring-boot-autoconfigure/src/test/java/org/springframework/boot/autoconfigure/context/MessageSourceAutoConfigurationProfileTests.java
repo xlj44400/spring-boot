@@ -18,8 +18,7 @@ package org.springframework.boot.autoconfigure.context;
 
 import java.util.Locale;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -28,7 +27,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,26 +35,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Dave Syer
  */
-
 @SpringBootTest
-@ImportAutoConfiguration({ MessageSourceAutoConfiguration.class,
-		PropertyPlaceholderAutoConfiguration.class })
+@ImportAutoConfiguration({ MessageSourceAutoConfiguration.class, PropertyPlaceholderAutoConfiguration.class })
 @ActiveProfiles("switch-messages")
 @DirtiesContext
-@RunWith(SpringRunner.class)
-public class MessageSourceAutoConfigurationProfileTests {
+class MessageSourceAutoConfigurationProfileTests {
 
 	@Autowired
 	private ApplicationContext context;
 
 	@Test
-	public void testMessageSourceFromPropertySourceAnnotation() {
-		assertThat(this.context.getMessage("foo", null, "Foo message", Locale.UK))
-				.isEqualTo("bar");
+	void testMessageSourceFromPropertySourceAnnotation() {
+		assertThat(this.context.getMessage("foo", null, "Foo message", Locale.UK)).isEqualTo("bar");
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	protected static class Config {
+	static class Config {
 
 	}
 

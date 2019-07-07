@@ -16,8 +16,8 @@
 
 package org.springframework.boot.autoconfigure.web;
 
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -31,41 +31,41 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stephane Nicoll
  */
-public class ConditionalOnEnabledResourceChainTests {
+class ConditionalOnEnabledResourceChainTests {
 
 	private final AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
 
-	@After
-	public void closeContext() {
+	@AfterEach
+	void closeContext() {
 		this.context.close();
 	}
 
 	@Test
-	public void disabledByDefault() {
+	void disabledByDefault() {
 		load();
 		assertThat(this.context.containsBean("foo")).isFalse();
 	}
 
 	@Test
-	public void disabledExplicitly() {
+	void disabledExplicitly() {
 		load("spring.resources.chain.enabled:false");
 		assertThat(this.context.containsBean("foo")).isFalse();
 	}
 
 	@Test
-	public void enabledViaMainEnabledFlag() {
+	void enabledViaMainEnabledFlag() {
 		load("spring.resources.chain.enabled:true");
 		assertThat(this.context.containsBean("foo")).isTrue();
 	}
 
 	@Test
-	public void enabledViaFixedStrategyFlag() {
+	void enabledViaFixedStrategyFlag() {
 		load("spring.resources.chain.strategy.fixed.enabled:true");
 		assertThat(this.context.containsBean("foo")).isTrue();
 	}
 
 	@Test
-	public void enabledViaContentStrategyFlag() {
+	void enabledViaContentStrategyFlag() {
 		load("spring.resources.chain.strategy.content.enabled:true");
 		assertThat(this.context.containsBean("foo")).isTrue();
 	}
@@ -81,7 +81,7 @@ public class ConditionalOnEnabledResourceChainTests {
 
 		@Bean
 		@ConditionalOnEnabledResourceChain
-		public String foo() {
+		String foo() {
 			return "foo";
 		}
 

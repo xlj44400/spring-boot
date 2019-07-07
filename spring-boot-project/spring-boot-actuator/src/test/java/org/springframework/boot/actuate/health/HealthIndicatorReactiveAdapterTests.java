@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.boot.actuate.health;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 import static org.mockito.BDDMockito.given;
@@ -27,38 +27,32 @@ import static org.mockito.Mockito.mock;
  *
  * @author Stephane Nicoll
  */
-public class HealthIndicatorReactiveAdapterTests {
+class HealthIndicatorReactiveAdapterTests {
 
 	@Test
-	public void delegateReturnsHealth() {
+	void delegateReturnsHealth() {
 		HealthIndicator delegate = mock(HealthIndicator.class);
-		HealthIndicatorReactiveAdapter adapter = new HealthIndicatorReactiveAdapter(
-				delegate);
+		HealthIndicatorReactiveAdapter adapter = new HealthIndicatorReactiveAdapter(delegate);
 		Health status = Health.up().build();
 		given(delegate.health()).willReturn(status);
 		StepVerifier.create(adapter.health()).expectNext(status).verifyComplete();
 	}
 
 	@Test
-	public void delegateThrowError() {
+	void delegateThrowError() {
 		HealthIndicator delegate = mock(HealthIndicator.class);
-		HealthIndicatorReactiveAdapter adapter = new HealthIndicatorReactiveAdapter(
-				delegate);
+		HealthIndicatorReactiveAdapter adapter = new HealthIndicatorReactiveAdapter(delegate);
 		given(delegate.health()).willThrow(new IllegalStateException("Expected"));
 		StepVerifier.create(adapter.health()).expectError(IllegalStateException.class);
 	}
 
 	@Test
-	public void delegateRunsOnTheElasticScheduler() {
+	void delegateRunsOnTheElasticScheduler() {
 		String currentThread = Thread.currentThread().getName();
 		HealthIndicator delegate = () -> Health
-				.status(Thread.currentThread().getName().equals(currentThread)
-						? Status.DOWN : Status.UP)
-				.build();
-		HealthIndicatorReactiveAdapter adapter = new HealthIndicatorReactiveAdapter(
-				delegate);
-		StepVerifier.create(adapter.health()).expectNext(Health.status(Status.UP).build())
-				.verifyComplete();
+				.status(Thread.currentThread().getName().equals(currentThread) ? Status.DOWN : Status.UP).build();
+		HealthIndicatorReactiveAdapter adapter = new HealthIndicatorReactiveAdapter(delegate);
+		StepVerifier.create(adapter.health()).expectNext(Health.status(Status.UP).build()).verifyComplete();
 	}
 
 }

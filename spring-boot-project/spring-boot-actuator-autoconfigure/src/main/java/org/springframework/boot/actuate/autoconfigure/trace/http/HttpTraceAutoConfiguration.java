@@ -18,10 +18,10 @@ package org.springframework.boot.actuate.autoconfigure.trace.http;
 
 import org.springframework.boot.actuate.trace.http.HttpExchangeTracer;
 import org.springframework.boot.actuate.trace.http.HttpTraceRepository;
-import org.springframework.boot.actuate.trace.http.InMemoryHttpTraceRepository;
 import org.springframework.boot.actuate.web.trace.reactive.HttpTraceWebFilter;
 import org.springframework.boot.actuate.web.trace.servlet.HttpTraceFilter;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -38,16 +38,10 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication
-@ConditionalOnProperty(prefix = "management.trace.http", name = "enabled",
-		matchIfMissing = true)
+@ConditionalOnProperty(prefix = "management.trace.http", name = "enabled", matchIfMissing = true)
+@ConditionalOnBean(HttpTraceRepository.class)
 @EnableConfigurationProperties(HttpTraceProperties.class)
 public class HttpTraceAutoConfiguration {
-
-	@Bean
-	@ConditionalOnMissingBean(HttpTraceRepository.class)
-	public InMemoryHttpTraceRepository traceRepository() {
-		return new InMemoryHttpTraceRepository();
-	}
 
 	@Bean
 	@ConditionalOnMissingBean
@@ -61,8 +55,7 @@ public class HttpTraceAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean
-		public HttpTraceFilter httpTraceFilter(HttpTraceRepository repository,
-				HttpExchangeTracer tracer) {
+		HttpTraceFilter httpTraceFilter(HttpTraceRepository repository, HttpExchangeTracer tracer) {
 			return new HttpTraceFilter(repository, tracer);
 		}
 
@@ -74,10 +67,9 @@ public class HttpTraceAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean
-		public HttpTraceWebFilter httpTraceWebFilter(HttpTraceRepository repository,
-				HttpExchangeTracer tracer, HttpTraceProperties traceProperties) {
-			return new HttpTraceWebFilter(repository, tracer,
-					traceProperties.getInclude());
+		HttpTraceWebFilter httpTraceWebFilter(HttpTraceRepository repository, HttpExchangeTracer tracer,
+				HttpTraceProperties traceProperties) {
+			return new HttpTraceWebFilter(repository, tracer, traceProperties.getInclude());
 		}
 
 	}

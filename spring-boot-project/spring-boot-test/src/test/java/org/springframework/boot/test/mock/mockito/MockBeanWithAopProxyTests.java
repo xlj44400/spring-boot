@@ -18,8 +18,8 @@ package org.springframework.boot.test.mock.mockito;
 
 import java.util.Arrays;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
@@ -31,7 +31,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.stereotype.Service;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -46,14 +46,14 @@ import static org.mockito.Mockito.verify;
  * @author Phillip Webb
  * @see <a href="https://github.com/spring-projects/spring-boot/issues/5837">5837</a>
  */
-@RunWith(SpringRunner.class)
-public class MockBeanWithAopProxyTests {
+@ExtendWith(SpringExtension.class)
+class MockBeanWithAopProxyTests {
 
 	@MockBean
 	private DateService dateService;
 
 	@Test
-	public void verifyShouldUseProxyTarget() {
+	void verifyShouldUseProxyTarget() {
 		given(this.dateService.getDate(false)).willReturn(1L);
 		Long d1 = this.dateService.getDate(false);
 		assertThat(d1).isEqualTo(1L);
@@ -71,14 +71,14 @@ public class MockBeanWithAopProxyTests {
 	static class Config {
 
 		@Bean
-		public CacheResolver cacheResolver(CacheManager cacheManager) {
+		CacheResolver cacheResolver(CacheManager cacheManager) {
 			SimpleCacheResolver resolver = new SimpleCacheResolver();
 			resolver.setCacheManager(cacheManager);
 			return resolver;
 		}
 
 		@Bean
-		public ConcurrentMapCacheManager cacheManager() {
+		ConcurrentMapCacheManager cacheManager() {
 			ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager();
 			cacheManager.setCacheNames(Arrays.asList("test"));
 			return cacheManager;
@@ -90,7 +90,7 @@ public class MockBeanWithAopProxyTests {
 	static class DateService {
 
 		@Cacheable(cacheNames = "test")
-		public Long getDate(boolean argument) {
+		Long getDate(boolean argument) {
 			return System.nanoTime();
 		}
 

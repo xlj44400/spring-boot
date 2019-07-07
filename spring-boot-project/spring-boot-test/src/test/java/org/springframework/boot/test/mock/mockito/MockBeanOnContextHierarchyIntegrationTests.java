@@ -16,8 +16,8 @@
 
 package org.springframework.boot.test.mock.mockito;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +30,7 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.ContextHierarchy;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,21 +40,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Phillip Webb
  */
-@RunWith(SpringRunner.class)
+@ExtendWith(SpringExtension.class)
 @ContextHierarchy({ @ContextConfiguration(classes = ParentConfig.class),
 		@ContextConfiguration(classes = ChildConfig.class) })
-public class MockBeanOnContextHierarchyIntegrationTests {
+class MockBeanOnContextHierarchyIntegrationTests {
 
 	@Autowired
 	private ChildConfig childConfig;
 
 	@Test
-	public void testMocking() {
+	void testMocking() {
 		ApplicationContext context = this.childConfig.getContext();
 		ApplicationContext parentContext = context.getParent();
 		assertThat(parentContext.getBeanNamesForType(ExampleService.class)).hasSize(1);
-		assertThat(parentContext.getBeanNamesForType(ExampleServiceCaller.class))
-				.hasSize(0);
+		assertThat(parentContext.getBeanNamesForType(ExampleServiceCaller.class)).hasSize(0);
 		assertThat(context.getBeanNamesForType(ExampleService.class)).hasSize(0);
 		assertThat(context.getBeanNamesForType(ExampleServiceCaller.class)).hasSize(1);
 		assertThat(context.getBean(ExampleService.class)).isNotNull();
@@ -74,12 +73,11 @@ public class MockBeanOnContextHierarchyIntegrationTests {
 		private ApplicationContext context;
 
 		@Override
-		public void setApplicationContext(ApplicationContext applicationContext)
-				throws BeansException {
+		public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
 			this.context = applicationContext;
 		}
 
-		public ApplicationContext getContext() {
+		ApplicationContext getContext() {
 			return this.context;
 		}
 

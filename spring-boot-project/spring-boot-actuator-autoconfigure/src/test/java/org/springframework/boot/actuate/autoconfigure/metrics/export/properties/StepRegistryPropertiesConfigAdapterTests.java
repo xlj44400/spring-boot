@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.springframework.boot.actuate.autoconfigure.metrics.export.properties
 
 import java.time.Duration;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,29 +37,28 @@ public abstract class StepRegistryPropertiesConfigAdapterTests<P extends StepReg
 	protected abstract A createConfigAdapter(P properties);
 
 	@Test
-	public void whenPropertiesStepIsSetAdapterStepReturnsIt() {
+	void whenPropertiesStepIsSetAdapterStepReturnsIt() {
 		P properties = createProperties();
 		properties.setStep(Duration.ofSeconds(42));
-		assertThat(createConfigAdapter(properties).step())
-				.isEqualTo(Duration.ofSeconds(42));
+		assertThat(createConfigAdapter(properties).step()).isEqualTo(Duration.ofSeconds(42));
 	}
 
 	@Test
-	public void whenPropertiesEnabledIsSetAdapterEnabledReturnsIt() {
+	void whenPropertiesEnabledIsSetAdapterEnabledReturnsIt() {
 		P properties = createProperties();
 		properties.setEnabled(false);
 		assertThat(createConfigAdapter(properties).enabled()).isFalse();
 	}
 
 	@Test
-	public void whenPropertiesNumThreadsIsSetAdapterNumThreadsReturnsIt() {
+	void whenPropertiesNumThreadsIsSetAdapterNumThreadsReturnsIt() {
 		P properties = createProperties();
 		properties.setNumThreads(42);
 		assertThat(createConfigAdapter(properties).numThreads()).isEqualTo(42);
 	}
 
 	@Test
-	public void whenPropertiesBatchSizeIsSetAdapterBatchSizeReturnsIt() {
+	void whenPropertiesBatchSizeIsSetAdapterBatchSizeReturnsIt() {
 		P properties = createProperties();
 		properties.setBatchSize(10042);
 		assertThat(createConfigAdapter(properties).batchSize()).isEqualTo(10042);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,24 +26,25 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 /**
- * Enable support for {@link ConfigurationProperties} annotated beans.
- * {@link ConfigurationProperties} beans can be registered in the standard way (for
- * example using {@link Bean @Bean} methods) or, for convenience, can be specified
+ * Enable support for {@link ConfigurationProperties @ConfigurationProperties} annotated
+ * beans. {@code @ConfigurationProperties} beans can be registered in the standard way
+ * (for example using {@link Bean @Bean} methods) or, for convenience, can be specified
  * directly on this annotation.
  *
  * @author Dave Syer
+ * @since 1.0.0
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@Import({ ConfigurationPropertiesBeanRegistrar.class,
-		ConfigurationPropertiesBindingPostProcessorRegistrar.class })
+@Import({ ConfigurationPropertiesBeanRegistrar.class, ConfigurationPropertiesBindingPostProcessorRegistrar.class })
 public @interface EnableConfigurationProperties {
 
 	/**
-	 * Convenient way to quickly register {@link ConfigurationProperties} annotated beans
-	 * with Spring. Standard Spring Beans will also be scanned regardless of this value.
-	 * @return {@link ConfigurationProperties} annotated beans to register
+	 * Convenient way to quickly register
+	 * {@link ConfigurationProperties @ConfigurationProperties} annotated beans with
+	 * Spring. Standard Spring Beans will also be scanned regardless of this value.
+	 * @return {@code @ConfigurationProperties} annotated beans to register
 	 */
 	Class<?>[] value() default {};
 

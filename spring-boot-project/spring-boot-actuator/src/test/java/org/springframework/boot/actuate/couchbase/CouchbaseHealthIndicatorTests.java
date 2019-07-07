@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import com.couchbase.client.core.message.internal.EndpointHealth;
 import com.couchbase.client.core.service.ServiceType;
 import com.couchbase.client.core.state.LifecycleState;
 import com.couchbase.client.java.Cluster;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.Status;
@@ -42,49 +42,42 @@ import static org.mockito.Mockito.verify;
  * @author Eddú Meléndez
  * @author Stephane Nicoll
  */
-public class CouchbaseHealthIndicatorTests {
+class CouchbaseHealthIndicatorTests {
 
 	@Test
 	@SuppressWarnings("unchecked")
-	public void couchbaseClusterIsUp() {
+	void couchbaseClusterIsUp() {
 		Cluster cluster = mock(Cluster.class);
 		CouchbaseHealthIndicator healthIndicator = new CouchbaseHealthIndicator(cluster);
-		List<EndpointHealth> endpoints = Arrays.asList(new EndpointHealth(
-				ServiceType.BINARY, LifecycleState.CONNECTED, new InetSocketAddress(0),
-				new InetSocketAddress(0), 1234, "endpoint-1"));
-		DiagnosticsReport diagnostics = new DiagnosticsReport(endpoints, "test-sdk",
-				"test-id", null);
+		List<EndpointHealth> endpoints = Arrays.asList(new EndpointHealth(ServiceType.BINARY, LifecycleState.CONNECTED,
+				new InetSocketAddress(0), new InetSocketAddress(0), 1234, "endpoint-1"));
+		DiagnosticsReport diagnostics = new DiagnosticsReport(endpoints, "test-sdk", "test-id", null);
 		given(cluster.diagnostics()).willReturn(diagnostics);
 		Health health = healthIndicator.health();
 		assertThat(health.getStatus()).isEqualTo(Status.UP);
 		assertThat(health.getDetails()).containsEntry("sdk", "test-sdk");
 		assertThat(health.getDetails()).containsKey("endpoints");
-		assertThat((List<Map<String, Object>>) health.getDetails().get("endpoints"))
-				.hasSize(1);
+		assertThat((List<Map<String, Object>>) health.getDetails().get("endpoints")).hasSize(1);
 		verify(cluster).diagnostics();
 	}
 
 	@Test
 	@SuppressWarnings("unchecked")
-	public void couchbaseClusterIsDown() {
+	void couchbaseClusterIsDown() {
 		Cluster cluster = mock(Cluster.class);
 		CouchbaseHealthIndicator healthIndicator = new CouchbaseHealthIndicator(cluster);
 		List<EndpointHealth> endpoints = Arrays.asList(
-				new EndpointHealth(ServiceType.BINARY, LifecycleState.CONNECTED,
-						new InetSocketAddress(0), new InetSocketAddress(0), 1234,
-						"endpoint-1"),
-				new EndpointHealth(ServiceType.BINARY, LifecycleState.CONNECTING,
-						new InetSocketAddress(0), new InetSocketAddress(0), 1234,
-						"endpoint-2"));
-		DiagnosticsReport diagnostics = new DiagnosticsReport(endpoints, "test-sdk",
-				"test-id", null);
+				new EndpointHealth(ServiceType.BINARY, LifecycleState.CONNECTED, new InetSocketAddress(0),
+						new InetSocketAddress(0), 1234, "endpoint-1"),
+				new EndpointHealth(ServiceType.BINARY, LifecycleState.CONNECTING, new InetSocketAddress(0),
+						new InetSocketAddress(0), 1234, "endpoint-2"));
+		DiagnosticsReport diagnostics = new DiagnosticsReport(endpoints, "test-sdk", "test-id", null);
 		given(cluster.diagnostics()).willReturn(diagnostics);
 		Health health = healthIndicator.health();
 		assertThat(health.getStatus()).isEqualTo(Status.DOWN);
 		assertThat(health.getDetails()).containsEntry("sdk", "test-sdk");
 		assertThat(health.getDetails()).containsKey("endpoints");
-		assertThat((List<Map<String, Object>>) health.getDetails().get("endpoints"))
-				.hasSize(2);
+		assertThat((List<Map<String, Object>>) health.getDetails().get("endpoints")).hasSize(2);
 		verify(cluster).diagnostics();
 	}
 

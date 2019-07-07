@@ -42,22 +42,19 @@ import org.springframework.context.annotation.Configuration;
  * @author Artsiom Yudovin
  * @since 2.1.1
  */
-
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(RestClient.class)
 @ConditionalOnBean(RestClient.class)
 @ConditionalOnEnabledHealthIndicator("elasticsearch")
 @AutoConfigureBefore(HealthIndicatorAutoConfiguration.class)
-@AutoConfigureAfter({ RestClientAutoConfiguration.class,
-		ElasticSearchClientHealthIndicatorAutoConfiguration.class })
+@AutoConfigureAfter({ RestClientAutoConfiguration.class, ElasticSearchClientHealthIndicatorAutoConfiguration.class })
 @SuppressWarnings("deprecation")
-public class ElasticSearchRestHealthIndicatorAutoConfiguration extends
-		CompositeHealthIndicatorConfiguration<ElasticsearchRestHealthIndicator, RestClient> {
+public class ElasticSearchRestHealthIndicatorAutoConfiguration
+		extends CompositeHealthIndicatorConfiguration<ElasticsearchRestHealthIndicator, RestClient> {
 
 	@Bean
 	@ConditionalOnMissingBean(name = "elasticsearchRestHealthIndicator")
-	public HealthIndicator elasticsearchRestHealthIndicator(
-			Map<String, RestClient> clients) {
+	public HealthIndicator elasticsearchRestHealthIndicator(Map<String, RestClient> clients) {
 		return createHealthIndicator(clients);
 	}
 

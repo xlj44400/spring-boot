@@ -16,8 +16,7 @@
 
 package org.springframework.boot.autoconfigure.web.servlet.error;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration;
@@ -36,7 +35,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.stereotype.Controller;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,12 +44,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Dave Syer
  */
-
-@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT,
-		properties = "spring.mvc.servlet.path:/spring/")
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = "spring.mvc.servlet.path:/spring/")
 @DirtiesContext
-@RunWith(SpringRunner.class)
-public class RemappedErrorViewIntegrationTests {
+class RemappedErrorViewIntegrationTests {
 
 	@LocalServerPort
 	private int port;
@@ -59,31 +54,28 @@ public class RemappedErrorViewIntegrationTests {
 	private TestRestTemplate template = new TestRestTemplate();
 
 	@Test
-	public void directAccessToErrorPage() {
-		String content = this.template.getForObject(
-				"http://localhost:" + this.port + "/spring/error", String.class);
+	void directAccessToErrorPage() {
+		String content = this.template.getForObject("http://localhost:" + this.port + "/spring/error", String.class);
 		assertThat(content).contains("error");
 		assertThat(content).contains("999");
 	}
 
 	@Test
-	public void forwardToErrorPage() {
-		String content = this.template
-				.getForObject("http://localhost:" + this.port + "/spring/", String.class);
+	void forwardToErrorPage() {
+		String content = this.template.getForObject("http://localhost:" + this.port + "/spring/", String.class);
 		assertThat(content).contains("error");
 		assertThat(content).contains("500");
 	}
 
 	@Configuration(proxyBeanMethods = false)
 	@Import({ PropertyPlaceholderAutoConfiguration.class, WebMvcAutoConfiguration.class,
-			HttpMessageConvertersAutoConfiguration.class,
-			ServletWebServerFactoryAutoConfiguration.class,
+			HttpMessageConvertersAutoConfiguration.class, ServletWebServerFactoryAutoConfiguration.class,
 			DispatcherServletAutoConfiguration.class, ErrorMvcAutoConfiguration.class })
 	@Controller
-	public static class TestConfiguration implements ErrorPageRegistrar {
+	static class TestConfiguration implements ErrorPageRegistrar {
 
 		@RequestMapping("/")
-		public String home() {
+		String home() {
 			throw new RuntimeException("Planned!");
 		}
 
@@ -93,9 +85,9 @@ public class RemappedErrorViewIntegrationTests {
 		}
 
 		// For manual testing
-		public static void main(String[] args) {
-			new SpringApplicationBuilder(TestConfiguration.class)
-					.properties("spring.mvc.servlet.path:spring/*").run(args);
+		static void main(String[] args) {
+			new SpringApplicationBuilder(TestConfiguration.class).properties("spring.mvc.servlet.path:spring/*")
+					.run(args);
 		}
 
 	}

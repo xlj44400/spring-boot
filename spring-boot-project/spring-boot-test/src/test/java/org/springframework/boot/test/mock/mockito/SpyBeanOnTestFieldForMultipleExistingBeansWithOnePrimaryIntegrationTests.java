@@ -16,8 +16,8 @@
 
 package org.springframework.boot.test.mock.mockito;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +27,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -38,8 +38,8 @@ import static org.mockito.Mockito.verify;
  *
  * @author Phillip Webb
  */
-@RunWith(SpringRunner.class)
-public class SpyBeanOnTestFieldForMultipleExistingBeansWithOnePrimaryIntegrationTests {
+@ExtendWith(SpringExtension.class)
+class SpyBeanOnTestFieldForMultipleExistingBeansWithOnePrimaryIntegrationTests {
 
 	@SpyBean
 	private SimpleExampleStringGenericService spy;
@@ -48,10 +48,10 @@ public class SpyBeanOnTestFieldForMultipleExistingBeansWithOnePrimaryIntegration
 	private ExampleGenericStringServiceCaller caller;
 
 	@Test
-	public void testSpying() {
+	void testSpying() {
 		assertThat(this.caller.sayGreeting()).isEqualTo("I say two");
-		assertThat(Mockito.mockingDetails(this.spy).getMockCreationSettings()
-				.getMockName().toString()).isEqualTo("two");
+		assertThat(Mockito.mockingDetails(this.spy).getMockCreationSettings().getMockName().toString())
+				.isEqualTo("two");
 		verify(this.spy).greeting();
 	}
 
@@ -60,13 +60,13 @@ public class SpyBeanOnTestFieldForMultipleExistingBeansWithOnePrimaryIntegration
 	static class Config {
 
 		@Bean
-		public SimpleExampleStringGenericService one() {
+		SimpleExampleStringGenericService one() {
 			return new SimpleExampleStringGenericService("one");
 		}
 
 		@Bean
 		@Primary
-		public SimpleExampleStringGenericService two() {
+		SimpleExampleStringGenericService two() {
 			return new SimpleExampleStringGenericService("two");
 		}
 

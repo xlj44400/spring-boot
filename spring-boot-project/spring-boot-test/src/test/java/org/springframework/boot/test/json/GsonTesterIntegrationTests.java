@@ -21,8 +21,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.gson.Gson;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  * @author Diego Berrueta
  */
-public class GsonTesterIntegrationTests {
+class GsonTesterIntegrationTests {
 
 	private GsonTester<ExampleObject> simpleJson;
 
@@ -46,41 +46,37 @@ public class GsonTesterIntegrationTests {
 
 	private static final String JSON = "{\"name\":\"Spring\",\"age\":123}";
 
-	@Before
-	public void setup() {
+	@BeforeEach
+	void setup() {
 		this.gson = new Gson();
 		GsonTester.initFields(this, this.gson);
 	}
 
 	@Test
-	public void typicalTest() throws Exception {
+	void typicalTest() throws Exception {
 		String example = JSON;
-		assertThat(this.simpleJson.parse(example).getObject().getName())
-				.isEqualTo("Spring");
+		assertThat(this.simpleJson.parse(example).getObject().getName()).isEqualTo("Spring");
 	}
 
 	@Test
-	public void typicalListTest() throws Exception {
+	void typicalListTest() throws Exception {
 		String example = "[" + JSON + "]";
 		assertThat(this.listJson.parse(example)).asList().hasSize(1);
-		assertThat(this.listJson.parse(example).getObject().get(0).getName())
-				.isEqualTo("Spring");
+		assertThat(this.listJson.parse(example).getObject().get(0).getName()).isEqualTo("Spring");
 	}
 
 	@Test
-	public void typicalMapTest() throws Exception {
+	void typicalMapTest() throws Exception {
 		Map<String, Integer> map = new LinkedHashMap<>();
 		map.put("a", 1);
 		map.put("b", 2);
-		assertThat(this.mapJson.write(map)).extractingJsonPathNumberValue("@.a")
-				.isEqualTo(1);
+		assertThat(this.mapJson.write(map)).extractingJsonPathNumberValue("@.a").isEqualTo(1);
 	}
 
 	@Test
-	public void stringLiteral() throws Exception {
+	void stringLiteral() throws Exception {
 		String stringWithSpecialCharacters = "myString";
-		assertThat(this.stringJson.write(stringWithSpecialCharacters))
-				.extractingJsonPathStringValue("@")
+		assertThat(this.stringJson.write(stringWithSpecialCharacters)).extractingJsonPathStringValue("@")
 				.isEqualTo(stringWithSpecialCharacters);
 	}
 

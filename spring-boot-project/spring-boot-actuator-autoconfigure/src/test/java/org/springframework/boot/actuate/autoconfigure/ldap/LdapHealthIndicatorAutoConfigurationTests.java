@@ -16,7 +16,7 @@
 
 package org.springframework.boot.actuate.autoconfigure.ldap;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.actuate.autoconfigure.health.HealthIndicatorAutoConfiguration;
 import org.springframework.boot.actuate.health.ApplicationHealthIndicator;
@@ -34,26 +34,22 @@ import static org.mockito.Mockito.mock;
  * @author Eddú Meléndez
  * @author Stephane Nicoll
  */
-public class LdapHealthIndicatorAutoConfigurationTests {
+class LdapHealthIndicatorAutoConfigurationTests {
 
 	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withBean(LdapOperations.class, () -> mock(LdapOperations.class))
-			.withConfiguration(
-					AutoConfigurations.of(LdapHealthIndicatorAutoConfiguration.class,
-							HealthIndicatorAutoConfiguration.class));
+			.withBean(LdapOperations.class, () -> mock(LdapOperations.class)).withConfiguration(AutoConfigurations
+					.of(LdapHealthIndicatorAutoConfiguration.class, HealthIndicatorAutoConfiguration.class));
 
 	@Test
-	public void runShouldCreateIndicator() {
-		this.contextRunner.run(
-				(context) -> assertThat(context).hasSingleBean(LdapHealthIndicator.class)
-						.doesNotHaveBean(ApplicationHealthIndicator.class));
+	void runShouldCreateIndicator() {
+		this.contextRunner.run((context) -> assertThat(context).hasSingleBean(LdapHealthIndicator.class)
+				.doesNotHaveBean(ApplicationHealthIndicator.class));
 	}
 
 	@Test
-	public void runWhenDisabledShouldNotCreateIndicator() {
+	void runWhenDisabledShouldNotCreateIndicator() {
 		this.contextRunner.withPropertyValues("management.health.ldap.enabled:false")
-				.run((context) -> assertThat(context)
-						.doesNotHaveBean(LdapHealthIndicator.class)
+				.run((context) -> assertThat(context).doesNotHaveBean(LdapHealthIndicator.class)
 						.hasSingleBean(ApplicationHealthIndicator.class));
 	}
 

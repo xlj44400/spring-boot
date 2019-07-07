@@ -16,9 +16,9 @@
 
 package org.springframework.boot.context.properties;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import org.springframework.boot.context.properties.scan.valid.a.AScanConfiguration;
@@ -31,28 +31,29 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willCallRealMethod;
 
 /**
- * Integration tests for {@link ConfigurationPropertiesScan}.
+ * Integration tests for {@link ConfigurationPropertiesScan @ConfigurationPropertiesScan}.
  *
  * @author Madhura Bhave
+ * @author Johnny Lim
  */
-public class ConfigurationPropertiesScanTests {
+class ConfigurationPropertiesScanTests {
 
 	private AnnotationConfigApplicationContext context;
 
-	@Before
-	public void setup() {
+	@BeforeEach
+	void setup() {
 		this.context = new AnnotationConfigApplicationContext();
 	}
 
-	@After
-	public void teardown() {
+	@AfterEach
+	void teardown() {
 		if (this.context != null) {
 			this.context.close();
 		}
 	}
 
 	@Test
-	public void scanImportBeanRegistrarShouldBeEnvironmentAware() {
+	void scanImportBeanRegistrarShouldBeEnvironmentAwareWithRequiredProfile() {
 		this.context.getEnvironment().addActiveProfile("test");
 		load(TestConfiguration.class);
 		assertThat(this.context.containsBean(
@@ -61,16 +62,31 @@ public class ConfigurationPropertiesScanTests {
 	}
 
 	@Test
-	public void scanImportBeanRegistrarShouldBeResourceLoaderAware() {
+	void scanImportBeanRegistrarShouldBeEnvironmentAwareWithoutRequiredProfile() {
+		load(TestConfiguration.class);
+		assertThat(this.context.containsBean(
+				"profile-org.springframework.boot.context.properties.scan.valid.a.AScanConfiguration$MyProfileProperties"))
+						.isFalse();
+	}
+
+	@Test
+	void scanImportBeanRegistrarShouldBeResourceLoaderAwareWithRequiredResource() {
 		DefaultResourceLoader resourceLoader = Mockito.mock(DefaultResourceLoader.class);
 		this.context.setResourceLoader(resourceLoader);
 		willCallRealMethod().given(resourceLoader).getClassLoader();
-		given(resourceLoader.getResource("test"))
-				.willReturn(new ByteArrayResource("test".getBytes()));
+		given(resourceLoader.getResource("test")).willReturn(new ByteArrayResource("test".getBytes()));
 		load(TestConfiguration.class);
 		assertThat(this.context.containsBean(
 				"resource-org.springframework.boot.context.properties.scan.valid.a.AScanConfiguration$MyResourceProperties"))
 						.isTrue();
+	}
+
+	@Test
+	void scanImportBeanRegistrarShouldBeResourceLoaderAwareWithoutRequiredResource() {
+		load(TestConfiguration.class);
+		assertThat(this.context.containsBean(
+				"resource-org.springframework.boot.context.properties.scan.valid.a.AScanConfiguration$MyResourceProperties"))
+						.isFalse();
 	}
 
 	private void load(Class<?>... classes) {

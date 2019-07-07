@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.boot.actuate.autoconfigure.mongo;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.actuate.autoconfigure.health.HealthIndicatorAutoConfiguration;
 import org.springframework.boot.actuate.health.ApplicationHealthIndicator;
@@ -36,31 +36,24 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Yulin Qin
  */
-public class MongoReactiveHealthIndicatorAutoConfigurationTests {
+class MongoReactiveHealthIndicatorAutoConfigurationTests {
 
 	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(MongoAutoConfiguration.class,
-					MongoDataAutoConfiguration.class,
-					MongoReactiveAutoConfiguration.class,
-					MongoReactiveDataAutoConfiguration.class,
-					MongoReactiveHealthIndicatorAutoConfiguration.class,
-					HealthIndicatorAutoConfiguration.class));
+			.withConfiguration(AutoConfigurations.of(MongoAutoConfiguration.class, MongoDataAutoConfiguration.class,
+					MongoReactiveAutoConfiguration.class, MongoReactiveDataAutoConfiguration.class,
+					MongoReactiveHealthIndicatorAutoConfiguration.class, HealthIndicatorAutoConfiguration.class));
 
 	@Test
-	public void runShouldCreateIndicator() {
-		this.contextRunner.run((context) -> assertThat(context)
-				.hasSingleBean(MongoReactiveHealthIndicator.class)
-				.doesNotHaveBean(MongoHealthIndicator.class)
-				.doesNotHaveBean(ApplicationHealthIndicator.class));
+	void runShouldCreateIndicator() {
+		this.contextRunner.run((context) -> assertThat(context).hasSingleBean(MongoReactiveHealthIndicator.class)
+				.doesNotHaveBean(MongoHealthIndicator.class).doesNotHaveBean(ApplicationHealthIndicator.class));
 	}
 
 	@Test
-	public void runWhenDisabledShouldNotCreateIndicator() {
+	void runWhenDisabledShouldNotCreateIndicator() {
 		this.contextRunner.withPropertyValues("management.health.mongo.enabled:false")
-				.run((context) -> assertThat(context)
-						.doesNotHaveBean(MongoReactiveHealthIndicator.class)
-						.doesNotHaveBean(MongoHealthIndicator.class)
-						.hasSingleBean(ApplicationHealthIndicator.class));
+				.run((context) -> assertThat(context).doesNotHaveBean(MongoReactiveHealthIndicator.class)
+						.doesNotHaveBean(MongoHealthIndicator.class).hasSingleBean(ApplicationHealthIndicator.class));
 	}
 
 }

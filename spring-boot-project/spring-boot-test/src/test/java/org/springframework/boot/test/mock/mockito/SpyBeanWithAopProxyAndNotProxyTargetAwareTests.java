@@ -18,8 +18,8 @@ package org.springframework.boot.test.mock.mockito;
 
 import java.util.Arrays;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.exceptions.misusing.UnfinishedVerificationException;
 
 import org.springframework.cache.CacheManager;
@@ -32,7 +32,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.stereotype.Service;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.Mockito.reset;
@@ -45,18 +45,17 @@ import static org.mockito.Mockito.verify;
  * @author Phillip Webb
  * @see <a href="https://github.com/spring-projects/spring-boot/issues/5837">5837</a>
  */
-@RunWith(SpringRunner.class)
-public class SpyBeanWithAopProxyAndNotProxyTargetAwareTests {
+@ExtendWith(SpringExtension.class)
+class SpyBeanWithAopProxyAndNotProxyTargetAwareTests {
 
 	@SpyBean(proxyTargetAware = false)
 	private DateService dateService;
 
 	@Test
-	public void verifyShouldUseProxyTarget() {
+	void verifyShouldUseProxyTarget() {
 		this.dateService.getDate(false);
 		verify(this.dateService, times(1)).getDate(false);
-		assertThatExceptionOfType(UnfinishedVerificationException.class)
-				.isThrownBy(() -> reset(this.dateService));
+		assertThatExceptionOfType(UnfinishedVerificationException.class).isThrownBy(() -> reset(this.dateService));
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -65,14 +64,14 @@ public class SpyBeanWithAopProxyAndNotProxyTargetAwareTests {
 	static class Config {
 
 		@Bean
-		public CacheResolver cacheResolver(CacheManager cacheManager) {
+		CacheResolver cacheResolver(CacheManager cacheManager) {
 			SimpleCacheResolver resolver = new SimpleCacheResolver();
 			resolver.setCacheManager(cacheManager);
 			return resolver;
 		}
 
 		@Bean
-		public ConcurrentMapCacheManager cacheManager() {
+		ConcurrentMapCacheManager cacheManager() {
 			ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager();
 			cacheManager.setCacheNames(Arrays.asList("test"));
 			return cacheManager;
@@ -81,7 +80,7 @@ public class SpyBeanWithAopProxyAndNotProxyTargetAwareTests {
 	}
 
 	@Service
-	static class DateService {
+	public static class DateService {
 
 		@Cacheable(cacheNames = "test")
 		public Long getDate(boolean arg) {

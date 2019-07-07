@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.boot.actuate.autoconfigure.solr;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.actuate.autoconfigure.health.HealthIndicatorAutoConfiguration;
 import org.springframework.boot.actuate.health.ApplicationHealthIndicator;
@@ -32,25 +32,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Phillip Webb
  */
-public class SolrHealthIndicatorAutoConfigurationTests {
+class SolrHealthIndicatorAutoConfigurationTests {
 
 	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(SolrAutoConfiguration.class,
-					SolrHealthIndicatorAutoConfiguration.class,
-					HealthIndicatorAutoConfiguration.class));
+					SolrHealthIndicatorAutoConfiguration.class, HealthIndicatorAutoConfiguration.class));
 
 	@Test
-	public void runShouldCreateIndicator() {
-		this.contextRunner.run(
-				(context) -> assertThat(context).hasSingleBean(SolrHealthIndicator.class)
-						.doesNotHaveBean(ApplicationHealthIndicator.class));
+	void runShouldCreateIndicator() {
+		this.contextRunner.run((context) -> assertThat(context).hasSingleBean(SolrHealthIndicator.class)
+				.doesNotHaveBean(ApplicationHealthIndicator.class));
 	}
 
 	@Test
-	public void runWhenDisabledShouldNotCreateIndicator() {
+	void runWhenDisabledShouldNotCreateIndicator() {
 		this.contextRunner.withPropertyValues("management.health.solr.enabled:false")
-				.run((context) -> assertThat(context)
-						.doesNotHaveBean(SolrHealthIndicator.class)
+				.run((context) -> assertThat(context).doesNotHaveBean(SolrHealthIndicator.class)
 						.hasSingleBean(ApplicationHealthIndicator.class));
 	}
 

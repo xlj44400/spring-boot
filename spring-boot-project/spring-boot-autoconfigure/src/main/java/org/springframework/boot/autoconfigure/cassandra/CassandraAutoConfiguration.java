@@ -40,6 +40,7 @@ import org.springframework.util.StringUtils;
  * @author Phillip Webb
  * @author Eddú Meléndez
  * @author Stephane Nicoll
+ * @author Steffen F. Qvistgaard
  * @since 1.3.0
  */
 @Configuration(proxyBeanMethods = false)
@@ -50,13 +51,13 @@ public class CassandraAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	public Cluster cassandraCluster(CassandraProperties properties,
-			ObjectProvider<ClusterBuilderCustomizer> builderCustomizers) {
+			ObjectProvider<ClusterBuilderCustomizer> builderCustomizers,
+			ObjectProvider<ClusterFactory> clusterFactory) {
 		PropertyMapper map = PropertyMapper.get();
-		Cluster.Builder builder = Cluster.builder()
-				.withClusterName(properties.getClusterName())
+		Cluster.Builder builder = Cluster.builder().withClusterName(properties.getClusterName())
 				.withPort(properties.getPort());
-		map.from(properties::getUsername).whenNonNull().to((username) -> builder
-				.withCredentials(username, properties.getPassword()));
+		map.from(properties::getUsername).whenNonNull()
+				.to((username) -> builder.withCredentials(username, properties.getPassword()));
 		map.from(properties::getCompression).whenNonNull().to(builder::withCompression);
 		QueryOptions queryOptions = getQueryOptions(properties);
 		map.from(queryOptions).to(builder::withQueryOptions);
@@ -65,22 +66,17 @@ public class CassandraAutoConfiguration {
 		map.from(properties::isSsl).whenTrue().toCall(builder::withSSL);
 		PoolingOptions poolingOptions = getPoolingOptions(properties);
 		map.from(poolingOptions).to(builder::withPoolingOptions);
-		map.from(properties::getContactPoints).as(StringUtils::toStringArray)
-				.to(builder::addContactPoints);
-		map.from(properties::isJmxEnabled).whenFalse()
-				.toCall(builder::withoutJMXReporting);
-		builderCustomizers.orderedStream()
-				.forEach((customizer) -> customizer.customize(builder));
-		return builder.build();
+		map.from(properties::getContactPoints).as(StringUtils::toStringArray).to(builder::addContactPoints);
+		map.from(properties::isJmxEnabled).whenFalse().toCall(builder::withoutJMXReporting);
+		builderCustomizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
+		return clusterFactory.getIfAvailable(() -> Cluster::buildFrom).create(builder);
 	}
 
 	private QueryOptions getQueryOptions(CassandraProperties properties) {
 		PropertyMapper map = PropertyMapper.get();
 		QueryOptions options = new QueryOptions();
-		map.from(properties::getConsistencyLevel).whenNonNull()
-				.to(options::setConsistencyLevel);
-		map.from(properties::getSerialConsistencyLevel).whenNonNull()
-				.to(options::setSerialConsistencyLevel);
+		map.from(properties::getConsistencyLevel).whenNonNull().to(options::setConsistencyLevel);
+		map.from(properties::getSerialConsistencyLevel).whenNonNull().to(options::setSerialConsistencyLevel);
 		map.from(properties::getFetchSize).to(options::setFetchSize);
 		return options;
 	}
@@ -90,8 +86,7 @@ public class CassandraAutoConfiguration {
 		SocketOptions options = new SocketOptions();
 		map.from(properties::getConnectTimeout).whenNonNull().asInt(Duration::toMillis)
 				.to(options::setConnectTimeoutMillis);
-		map.from(properties::getReadTimeout).whenNonNull().asInt(Duration::toMillis)
-				.to(options::setReadTimeoutMillis);
+		map.from(properties::getReadTimeout).whenNonNull().asInt(Duration::toMillis).to(options::setReadTimeoutMillis);
 		return options;
 	}
 
@@ -103,8 +98,8 @@ public class CassandraAutoConfiguration {
 				.to(options::setIdleTimeoutSeconds);
 		map.from(poolProperties::getPoolTimeout).whenNonNull().asInt(Duration::toMillis)
 				.to(options::setPoolTimeoutMillis);
-		map.from(poolProperties::getHeartbeatInterval).whenNonNull()
-				.asInt(Duration::getSeconds).to(options::setHeartbeatIntervalSeconds);
+		map.from(poolProperties::getHeartbeatInterval).whenNonNull().asInt(Duration::getSeconds)
+				.to(options::setHeartbeatIntervalSeconds);
 		map.from(poolProperties::getMaxQueueSize).to(options::setMaxQueueSize);
 		return options;
 	}

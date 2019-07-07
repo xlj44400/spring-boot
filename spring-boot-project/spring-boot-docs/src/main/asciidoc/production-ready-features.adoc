@@ -2,13 +2,10 @@
 = Spring Boot Actuator: Production-ready Features
 include::attributes.adoc[]
 
-[partintro]
---
 Spring Boot includes a number of additional features to help you monitor and manage your
 application when you push it to production. You can choose to manage and monitor your
 application by using HTTP endpoints or with JMX. Auditing, health, and metrics gathering
 can also be automatically applied to your application.
---
 
 
 
@@ -1100,7 +1097,7 @@ management endpoint, as shown in the following example:
 ----
 
 The preceding `application.properties` example changes the endpoint from
-`/actuator/{id}` to `/manage/{id}` (for example, `/manage/info`).
+`/actuator/\{id}` to `/manage/\{id}` (for example, `/manage/info`).
 
 NOTE: Unless the management port has been configured to
 <<production-ready-customizing-management-server-port,expose endpoints by using a
@@ -1378,7 +1375,7 @@ https://micrometer.io/docs[reference documentation], in particular the
 === Getting started
 Spring Boot auto-configures a composite `MeterRegistry` and adds a registry to the
 composite for each of the supported implementations that it finds on the classpath. Having
-a dependency on `micrometer-registry-{system}` in your runtime classpath is enough for
+a dependency on `micrometer-registry-\{system}` in your runtime classpath is enough for
 Spring Boot to configure the registry.
 
 Most registries share common features. For instance, you can disable a particular registry
@@ -1793,7 +1790,8 @@ Spring Boot registers the following core metrics when applicable:
 * Logback metrics: record the number of events logged to Logback at each level
 * Uptime metrics: report a gauge for uptime and a fixed gauge representing the
 application's absolute start time
-* Tomcat metrics
+* Tomcat metrics (`server.tomcat.mbeanregistry.enabled` must be set to `true` for all
+Tomcat metrics to be registered)
 * https://docs.spring.io/spring-integration/docs/current/reference/html/system-management-chapter.html#micrometer-integration[Spring Integration] metrics
 
 
@@ -1801,9 +1799,9 @@ application's absolute start time
 [[production-ready-metrics-spring-mvc]]
 ==== Spring MVC Metrics
 Auto-configuration enables the instrumentation of requests handled by Spring MVC. When
-`management.metrics.web.server.auto-time-requests` is `true`, this instrumentation occurs
-for all requests. Alternatively, when set to `false`, you can enable instrumentation by
-adding `@Timed` to a request-handling method:
+`management.metrics.web.server.request.autotime.enabled` is `true`, this instrumentation
+occurs for all requests. Alternatively, when set to `false`, you can enable
+instrumentation by adding `@Timed` to a request-handling method:
 
 [source,java,indent=0]
 ----
@@ -1848,7 +1846,7 @@ By default, Spring MVC-related metrics are tagged with the following information
 
 |`uri`
 |Request's URI template prior to variable substitution, if possible (for example,
-`/api/person/{id}`)
+`/api/person/\{id}`)
 
 |===
 
@@ -1885,7 +1883,7 @@ By default, WebFlux-related metrics are tagged with the following information:
 
 |`uri`
 |Request's URI template prior to variable substitution, if possible (for example,
-`/api/person/{id}`)
+`/api/person/\{id}`)
 
 |===
 
@@ -1896,8 +1894,8 @@ To customize the tags, provide a `@Bean` that implements `WebFluxTagsProvider`.
 [[production-ready-metrics-jersey-server]]
 ==== Jersey Server Metrics
 Auto-configuration enables the instrumentation of requests handled by the Jersey JAX-RS
-implementation. When `management.metrics.web.server.auto-time-requests` is `true`, this
-instrumentation occurs for all requests. Alternatively, when set to `false`, you can
+implementation. When `management.metrics.web.server.request.autotime.enabled` is `true`,
+this instrumentation occurs for all requests. Alternatively, when set to `false`, you can
 enable instrumentation by adding `@Timed` to a request-handling method:
 
 [source,java,indent=0]
@@ -1942,7 +1940,7 @@ By default, Jersey server metrics are tagged with the following information:
 
 |`uri`
 |Request's URI template prior to variable substitution, if possible (for example,
-`/api/person/{id}`)
+`/api/person/\{id}`)
 
 |===
 
@@ -1980,14 +1978,15 @@ following information:
 |`outcome`
 |Request's outcome based on the status code of the response. 1xx is
 `INFORMATIONAL`, 2xx is `SUCCESS`, 3xx is `REDIRECTION`, 4xx `CLIENT_ERROR`, and 5xx is
-`SERVER_ERROR`
+`SERVER_ERROR`, `UNKNOWN` otherwise
 
 |`status`
-|Response's HTTP status code (for example, `200` or `500`)
+|Response's HTTP status code if available (for example, `200` or `500`),
+or `IO_ERROR` in case or I/O issues, `CLIENT_ERROR` otherwise
 
 |`uri`
 |Request's URI template prior to variable substitution, if possible (for example,
-`/api/person/{id}`)
+`/api/person/\{id}`)
 
 |===
 
@@ -2200,12 +2199,23 @@ maximum size for the "Metaspace", you could add an additional `tag=id:Metaspace`
 Once Spring Security is in play, Spring Boot Actuator has a flexible audit framework that
 publishes events (by default, "`authentication success`", "`failure`" and
 "`access denied`" exceptions). This feature can be very useful for reporting and for
-implementing a lock-out policy based on authentication failures. To customize published
-security events, you can provide your own implementations of
+implementing a lock-out policy based on authentication failures.
+
+Auditing can be enabled by providing a bean of type `AuditEventRepository` in your application's
+configuration. For convenience, Spring Boot offers an `InMemoryAuditEventRepository`.
+`InMemoryAuditEventRepository` has limited capabilities and we recommend using it only for development
+environments. For production environments, consider creating your own alternative `AuditEventRepository`
+implementation.
+
+
+
+[[production-ready-auditing-custom]]
+=== Custom Auditing
+To customize published security events, you can provide your own implementations of
 `AbstractAuthenticationAuditListener` and `AbstractAuthorizationAuditListener`.
 
 You can also use the audit services for your own business events. To do so, either inject
-the existing `AuditEventRepository` into your own components and use that directly or
+the `AuditEventRepository` bean into your own components and use that directly or
 publish an `AuditApplicationEvent` with the Spring `ApplicationEventPublisher` (by
 implementing `ApplicationEventPublisherAware`).
 
@@ -2213,8 +2223,12 @@ implementing `ApplicationEventPublisherAware`).
 
 [[production-ready-http-tracing]]
 == HTTP Tracing
-Tracing is automatically enabled for all HTTP requests. You can view the `httptrace`
-endpoint and obtain basic information about the last 100 request-response exchanges.
+HTTP Tracing can be enabled by providing a bean of type `HttpTraceRepository` in your application's
+configuration. For convenience, Spring Boot offers an `InMemoryHttpTraceRepository` that stores traces
+for the last 100 request-response exchanges, by default. `InMemoryHttpTraceRepository` is limited
+compared to other tracing solutions and we recommend using it only for development environments.
+For production environments, consider creating your own alternative `HttpTraceRepository` implementation.
+You can view the `httptrace` endpoint and obtain information about the request-response exchanges.
 
 
 
@@ -2223,11 +2237,6 @@ endpoint and obtain basic information about the last 100 request-response exchan
 To customize the items that are included in each trace, use the
 `management.trace.http.include` configuration property. For advanced customization,
 consider registering your own `HttpExchangeTracer` implementation.
-
-By default, an `InMemoryHttpTraceRepository` that stores traces for the last 100
-request-response exchanges is used. If you need to expand the capacity, you can define
-your own instance of the `InMemoryHttpTraceRepository` bean. You can also create your own
-alternative `HttpTraceRepository` implementation.
 
 
 

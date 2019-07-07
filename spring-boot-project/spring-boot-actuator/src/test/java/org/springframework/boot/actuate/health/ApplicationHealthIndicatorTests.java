@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.boot.actuate.health;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,10 +25,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Phillip Webb
  */
-public class ApplicationHealthIndicatorTests {
+class ApplicationHealthIndicatorTests {
 
 	@Test
-	public void indicatesUp() {
+	void indicatesUp() {
 		ApplicationHealthIndicator healthIndicator = new ApplicationHealthIndicator();
 		assertThat(healthIndicator.health().getStatus()).isEqualTo(Status.UP);
 	}

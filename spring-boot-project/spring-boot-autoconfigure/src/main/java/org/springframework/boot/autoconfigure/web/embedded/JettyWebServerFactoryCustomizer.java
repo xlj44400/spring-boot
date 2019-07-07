@@ -21,9 +21,10 @@ import java.util.Arrays;
 
 import org.eclipse.jetty.server.AbstractConnector;
 import org.eclipse.jetty.server.ConnectionFactory;
+import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
-import org.eclipse.jetty.server.NCSARequestLog;
+import org.eclipse.jetty.server.RequestLogWriter;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.HandlerCollection;
@@ -47,15 +48,14 @@ import org.springframework.util.unit.DataSize;
  * @author Phillip Webb
  * @since 2.0.0
  */
-public class JettyWebServerFactoryCustomizer implements
-		WebServerFactoryCustomizer<ConfigurableJettyWebServerFactory>, Ordered {
+public class JettyWebServerFactoryCustomizer
+		implements WebServerFactoryCustomizer<ConfigurableJettyWebServerFactory>, Ordered {
 
 	private final Environment environment;
 
 	private final ServerProperties serverProperties;
 
-	public JettyWebServerFactoryCustomizer(Environment environment,
-			ServerProperties serverProperties) {
+	public JettyWebServerFactoryCustomizer(Environment environment, ServerProperties serverProperties) {
 		this.environment = environment;
 		this.serverProperties = serverProperties;
 	}
@@ -71,23 +71,16 @@ public class JettyWebServerFactoryCustomizer implements
 		ServerProperties.Jetty jettyProperties = properties.getJetty();
 		factory.setUseForwardHeaders(getOrDeduceUseForwardHeaders());
 		PropertyMapper propertyMapper = PropertyMapper.get();
-		propertyMapper.from(jettyProperties::getAcceptors).whenNonNull()
-				.to(factory::setAcceptors);
-		propertyMapper.from(jettyProperties::getSelectors).whenNonNull()
-				.to(factory::setSelectors);
-		propertyMapper.from(properties::getMaxHttpHeaderSize).whenNonNull()
-				.asInt(DataSize::toBytes).when(this::isPositive)
-				.to((maxHttpHeaderSize) -> factory.addServerCustomizers(
-						new MaxHttpHeaderSizeCustomizer(maxHttpHeaderSize)));
-		propertyMapper.from(jettyProperties::getMaxHttpPostSize).asInt(DataSize::toBytes)
-				.when(this::isPositive)
-				.to((maxHttpPostSize) -> customizeMaxHttpPostSize(factory,
-						maxHttpPostSize));
+		propertyMapper.from(jettyProperties::getAcceptors).whenNonNull().to(factory::setAcceptors);
+		propertyMapper.from(jettyProperties::getSelectors).whenNonNull().to(factory::setSelectors);
+		propertyMapper.from(properties::getMaxHttpHeaderSize).whenNonNull().asInt(DataSize::toBytes)
+				.when(this::isPositive).to((maxHttpHeaderSize) -> factory
+						.addServerCustomizers(new MaxHttpHeaderSizeCustomizer(maxHttpHeaderSize)));
+		propertyMapper.from(jettyProperties::getMaxHttpPostSize).asInt(DataSize::toBytes).when(this::isPositive)
+				.to((maxHttpPostSize) -> customizeMaxHttpPostSize(factory, maxHttpPostSize));
 		propertyMapper.from(properties::getConnectionTimeout).whenNonNull()
-				.to((connectionTimeout) -> customizeConnectionTimeout(factory,
-						connectionTimeout));
-		propertyMapper.from(jettyProperties::getAccesslog)
-				.when(ServerProperties.Jetty.Accesslog::isEnabled)
+				.to((connectionTimeout) -> customizeConnectionTimeout(factory, connectionTimeout));
+		propertyMapper.from(jettyProperties::getAccesslog).when(ServerProperties.Jetty.Accesslog::isEnabled)
 				.to((accesslog) -> customizeAccessLog(factory, accesslog));
 	}
 
@@ -96,29 +89,24 @@ public class JettyWebServerFactoryCustomizer implements
 	}
 
 	private boolean getOrDeduceUseForwardHeaders() {
-		if (this.serverProperties.getForwardHeadersStrategy()
-				.equals(ServerProperties.ForwardHeadersStrategy.NONE)) {
+		if (this.serverProperties.getForwardHeadersStrategy().equals(ServerProperties.ForwardHeadersStrategy.NONE)) {
 			CloudPlatform platform = CloudPlatform.getActive(this.environment);
 			return platform != null && platform.isUsingForwardHeaders();
 		}
-		return this.serverProperties.getForwardHeadersStrategy()
-				.equals(ServerProperties.ForwardHeadersStrategy.NATIVE);
+		return this.serverProperties.getForwardHeadersStrategy().equals(ServerProperties.ForwardHeadersStrategy.NATIVE);
 	}
 
-	private void customizeConnectionTimeout(ConfigurableJettyWebServerFactory factory,
-			Duration connectionTimeout) {
+	private void customizeConnectionTimeout(ConfigurableJettyWebServerFactory factory, Duration connectionTimeout) {
 		factory.addServerCustomizers((server) -> {
 			for (org.eclipse.jetty.server.Connector connector : server.getConnectors()) {
 				if (connector instanceof AbstractConnector) {
-					((AbstractConnector) connector)
-							.setIdleTimeout(connectionTimeout.toMillis());
+					((AbstractConnector) connector).setIdleTimeout(connectionTimeout.toMillis());
 				}
 			}
 		});
 	}
 
-	private void customizeMaxHttpPostSize(ConfigurableJettyWebServerFactory factory,
-			int maxHttpPostSize) {
+	private void customizeMaxHttpPostSize(ConfigurableJettyWebServerFactory factory, int maxHttpPostSize) {
 		factory.addServerCustomizers(new JettyServerCustomizer() {
 
 			@Override
@@ -126,19 +114,16 @@ public class JettyWebServerFactoryCustomizer implements
 				setHandlerMaxHttpPostSize(maxHttpPostSize, server.getHandlers());
 			}
 
-			private void setHandlerMaxHttpPostSize(int maxHttpPostSize,
-					Handler... handlers) {
+			private void setHandlerMaxHttpPostSize(int maxHttpPostSize, Handler... handlers) {
 				for (Handler handler : handlers) {
 					if (handler instanceof ContextHandler) {
 						((ContextHandler) handler).setMaxFormContentSize(maxHttpPostSize);
 					}
 					else if (handler instanceof HandlerWrapper) {
-						setHandlerMaxHttpPostSize(maxHttpPostSize,
-								((HandlerWrapper) handler).getHandler());
+						setHandlerMaxHttpPostSize(maxHttpPostSize, ((HandlerWrapper) handler).getHandler());
 					}
 					else if (handler instanceof HandlerCollection) {
-						setHandlerMaxHttpPostSize(maxHttpPostSize,
-								((HandlerCollection) handler).getHandlers());
+						setHandlerMaxHttpPostSize(maxHttpPostSize, ((HandlerCollection) handler).getHandlers());
 					}
 				}
 			}
@@ -149,34 +134,32 @@ public class JettyWebServerFactoryCustomizer implements
 	private void customizeAccessLog(ConfigurableJettyWebServerFactory factory,
 			ServerProperties.Jetty.Accesslog properties) {
 		factory.addServerCustomizers((server) -> {
-			NCSARequestLog log = new NCSARequestLog();
-			if (properties.getFilename() != null) {
-				log.setFilename(properties.getFilename());
-			}
-			if (properties.getFileDateFormat() != null) {
-				log.setFilenameDateFormat(properties.getFileDateFormat());
-			}
-			log.setRetainDays(properties.getRetentionPeriod());
-			log.setAppend(properties.isAppend());
-			log.setExtended(properties.isExtendedFormat());
-			if (properties.getDateFormat() != null) {
-				log.setLogDateFormat(properties.getDateFormat());
-			}
-			if (properties.getLocale() != null) {
-				log.setLogLocale(properties.getLocale());
-			}
-			if (properties.getTimeZone() != null) {
-				log.setLogTimeZone(properties.getTimeZone().getID());
-			}
-			log.setLogCookies(properties.isLogCookies());
-			log.setLogServer(properties.isLogServer());
-			log.setLogLatency(properties.isLogLatency());
-			log.setPreferProxiedForAddress(properties.isPreferProxiedForAddress());
+			RequestLogWriter logWriter = new RequestLogWriter();
+			String format = getLogFormat(properties);
+			CustomRequestLog log = new CustomRequestLog(logWriter, format);
 			if (!CollectionUtils.isEmpty(properties.getIgnorePaths())) {
 				log.setIgnorePaths(properties.getIgnorePaths().toArray(new String[0]));
 			}
+			if (properties.getFilename() != null) {
+				logWriter.setFilename(properties.getFilename());
+			}
+			if (properties.getFileDateFormat() != null) {
+				logWriter.setFilenameDateFormat(properties.getFileDateFormat());
+			}
+			logWriter.setRetainDays(properties.getRetentionPeriod());
+			logWriter.setAppend(properties.isAppend());
 			server.setRequestLog(log);
 		});
+	}
+
+	private String getLogFormat(ServerProperties.Jetty.Accesslog properties) {
+		if (properties.getCustomFormat() != null) {
+			return properties.getCustomFormat();
+		}
+		else if (ServerProperties.Jetty.Accesslog.FORMAT.EXTENDED_NCSA.equals(properties.getFormat())) {
+			return CustomRequestLog.EXTENDED_NCSA_FORMAT;
+		}
+		return CustomRequestLog.NCSA_FORMAT;
 	}
 
 	private static class MaxHttpHeaderSizeCustomizer implements JettyServerCustomizer {

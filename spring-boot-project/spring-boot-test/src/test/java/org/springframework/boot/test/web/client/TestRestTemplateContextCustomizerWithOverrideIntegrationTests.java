@@ -24,8 +24,7 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,7 +34,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -47,14 +45,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @DirtiesContext
-@RunWith(SpringRunner.class)
-public class TestRestTemplateContextCustomizerWithOverrideIntegrationTests {
+class TestRestTemplateContextCustomizerWithOverrideIntegrationTests {
 
 	@Autowired
 	private TestRestTemplate restTemplate;
 
 	@Test
-	public void test() {
+	void test() {
 		assertThat(this.restTemplate).isInstanceOf(CustomTestRestTemplate.class);
 	}
 
@@ -63,12 +60,12 @@ public class TestRestTemplateContextCustomizerWithOverrideIntegrationTests {
 	static class TestConfig {
 
 		@Bean
-		public TomcatServletWebServerFactory webServerFactory() {
+		TomcatServletWebServerFactory webServerFactory() {
 			return new TomcatServletWebServerFactory(0);
 		}
 
 		@Bean
-		public TestRestTemplate template() {
+		TestRestTemplate template() {
 			return new CustomTestRestTemplate();
 		}
 
@@ -77,8 +74,7 @@ public class TestRestTemplateContextCustomizerWithOverrideIntegrationTests {
 	static class TestServlet extends GenericServlet {
 
 		@Override
-		public void service(ServletRequest request, ServletResponse response)
-				throws ServletException, IOException {
+		public void service(ServletRequest request, ServletResponse response) throws ServletException, IOException {
 			try (PrintWriter writer = response.getWriter()) {
 				writer.println("hello");
 			}

@@ -17,6 +17,7 @@
 package org.springframework.boot.autoconfigure.rsocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.rsocket.RSocketFactory;
 
@@ -32,10 +33,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.codec.CharSequenceEncoder;
+import org.springframework.core.codec.StringDecoder;
 import org.springframework.core.io.buffer.NettyDataBufferFactory;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.cbor.Jackson2CborDecoder;
+import org.springframework.http.codec.cbor.Jackson2CborEncoder;
 import org.springframework.http.codec.json.Jackson2JsonDecoder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.messaging.rsocket.RSocketStrategies;
 
 /**
@@ -45,37 +51,55 @@ import org.springframework.messaging.rsocket.RSocketStrategies;
  * @since 2.2.0
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass({ RSocketFactory.class, RSocketStrategies.class,
-		PooledByteBufAllocator.class })
+@ConditionalOnClass({ RSocketFactory.class, RSocketStrategies.class, PooledByteBufAllocator.class })
 @AutoConfigureAfter(JacksonAutoConfiguration.class)
 public class RSocketStrategiesAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public RSocketStrategies rSocketStrategies(
-			ObjectProvider<RSocketStrategiesCustomizer> customizers) {
+	public RSocketStrategies rSocketStrategies(ObjectProvider<RSocketStrategiesCustomizer> customizers) {
 		RSocketStrategies.Builder builder = RSocketStrategies.builder();
 		builder.reactiveAdapterStrategy(ReactiveAdapterRegistry.getSharedInstance());
-		customizers.stream().forEach((customizer) -> customizer.customize(builder));
-		builder.dataBufferFactory(
-				new NettyDataBufferFactory(PooledByteBufAllocator.DEFAULT));
+		customizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
+		builder.decoder(StringDecoder.allMimeTypes());
+		builder.encoder(CharSequenceEncoder.allMimeTypes());
+		builder.dataBufferFactory(new NettyDataBufferFactory(PooledByteBufAllocator.DEFAULT));
 		return builder.build();
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnClass(ObjectMapper.class)
-	protected static class JacksonStrategyConfiguration {
+	@ConditionalOnClass({ ObjectMapper.class, CBORFactory.class })
+	protected static class JacksonCborStrategyConfiguration {
+
+		private static final MediaType[] SUPPORTED_TYPES = { MediaType.APPLICATION_CBOR };
 
 		@Bean
 		@Order(0)
-		@ConditionalOnBean(ObjectMapper.class)
-		public RSocketStrategiesCustomizer jacksonStrategyCustomizer(
-				ObjectMapper objectMapper) {
+		@ConditionalOnBean(Jackson2ObjectMapperBuilder.class)
+		public RSocketStrategiesCustomizer jacksonCborRSocketStrategyCustomizer(Jackson2ObjectMapperBuilder builder) {
 			return (strategy) -> {
-				MediaType[] supportedTypes = new MediaType[] { MediaType.APPLICATION_JSON,
-						new MediaType("application", "*+json") };
-				strategy.decoder(new Jackson2JsonDecoder(objectMapper, supportedTypes));
-				strategy.encoder(new Jackson2JsonEncoder(objectMapper, supportedTypes));
+				ObjectMapper objectMapper = builder.factory(new CBORFactory()).build();
+				strategy.decoder(new Jackson2CborDecoder(objectMapper, SUPPORTED_TYPES));
+				strategy.encoder(new Jackson2CborEncoder(objectMapper, SUPPORTED_TYPES));
+			};
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass(ObjectMapper.class)
+	protected static class JacksonJsonStrategyConfiguration {
+
+		private static final MediaType[] SUPPORTED_TYPES = { MediaType.APPLICATION_JSON,
+				new MediaType("application", "*+json") };
+
+		@Bean
+		@Order(1)
+		@ConditionalOnBean(ObjectMapper.class)
+		public RSocketStrategiesCustomizer jacksonJsonRSocketStrategyCustomizer(ObjectMapper objectMapper) {
+			return (strategy) -> {
+				strategy.decoder(new Jackson2JsonDecoder(objectMapper, SUPPORTED_TYPES));
+				strategy.encoder(new Jackson2JsonEncoder(objectMapper, SUPPORTED_TYPES));
 			};
 		}
 

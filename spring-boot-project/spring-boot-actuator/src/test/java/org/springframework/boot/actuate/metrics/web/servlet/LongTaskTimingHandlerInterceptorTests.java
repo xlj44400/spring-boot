@@ -27,15 +27,15 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.MockClock;
 import io.micrometer.core.instrument.simple.SimpleConfig;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -63,9 +63,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * @author Andy Wilkinson
  */
-@RunWith(SpringRunner.class)
+@ExtendWith(SpringExtension.class)
 @WebAppConfiguration
-public class LongTaskTimingHandlerInterceptorTests {
+class LongTaskTimingHandlerInterceptorTests {
 
 	@Autowired
 	private SimpleMeterRegistry registry;
@@ -78,31 +78,29 @@ public class LongTaskTimingHandlerInterceptorTests {
 
 	private MockMvc mvc;
 
-	@Before
-	public void setUpMockMvc() {
+	@BeforeEach
+	void setUpMockMvc() {
 		this.mvc = MockMvcBuilders.webAppContextSetup(this.context).build();
 	}
 
 	@Test
-	public void asyncRequestThatThrowsUncheckedException() throws Exception {
+	void asyncRequestThatThrowsUncheckedException() throws Exception {
 		MvcResult result = this.mvc.perform(get("/api/c1/completableFutureException"))
 				.andExpect(request().asyncStarted()).andReturn();
-		assertThat(this.registry.get("my.long.request.exception").longTaskTimer()
-				.activeTasks()).isEqualTo(1);
+		assertThat(this.registry.get("my.long.request.exception").longTaskTimer().activeTasks()).isEqualTo(1);
 		assertThatExceptionOfType(NestedServletException.class)
 				.isThrownBy(() -> this.mvc.perform(asyncDispatch(result)))
 				.withRootCauseInstanceOf(RuntimeException.class);
-		assertThat(this.registry.get("my.long.request.exception").longTaskTimer()
-				.activeTasks()).isEqualTo(0);
+		assertThat(this.registry.get("my.long.request.exception").longTaskTimer().activeTasks()).isEqualTo(0);
 	}
 
 	@Test
-	public void asyncCallableRequest() throws Exception {
+	void asyncCallableRequest() throws Exception {
 		AtomicReference<MvcResult> result = new AtomicReference<>();
 		Thread backgroundRequest = new Thread(() -> {
 			try {
-				result.set(this.mvc.perform(get("/api/c1/callable/10"))
-						.andExpect(request().asyncStarted()).andReturn());
+				result.set(
+						this.mvc.perform(get("/api/c1/callable/10")).andExpect(request().asyncStarted()).andReturn());
 			}
 			catch (Exception ex) {
 				fail("Failed to execute async request", ex);
@@ -110,13 +108,13 @@ public class LongTaskTimingHandlerInterceptorTests {
 		});
 		backgroundRequest.start();
 		this.callableBarrier.await();
-		assertThat(this.registry.get("my.long.request").tags("region", "test")
-				.longTaskTimer().activeTasks()).isEqualTo(1);
+		assertThat(this.registry.get("my.long.request").tags("region", "test").longTaskTimer().activeTasks())
+				.isEqualTo(1);
 		this.callableBarrier.await();
 		backgroundRequest.join();
 		this.mvc.perform(asyncDispatch(result.get())).andExpect(status().isOk());
-		assertThat(this.registry.get("my.long.request").tags("region", "test")
-				.longTaskTimer().activeTasks()).isEqualTo(0);
+		assertThat(this.registry.get("my.long.request").tags("region", "test").longTaskTimer().activeTasks())
+				.isEqualTo(0);
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -145,8 +143,8 @@ public class LongTaskTimingHandlerInterceptorTests {
 
 				@Override
 				public void addInterceptors(InterceptorRegistry registry) {
-					registry.addInterceptor(new LongTaskTimingHandlerInterceptor(
-							meterRegistry, new DefaultWebMvcTagsProvider()));
+					registry.addInterceptor(
+							new LongTaskTimingHandlerInterceptor(meterRegistry, new DefaultWebMvcTagsProvider()));
 				}
 
 			};
@@ -162,10 +160,9 @@ public class LongTaskTimingHandlerInterceptorTests {
 		private CyclicBarrier callableBarrier;
 
 		@Timed
-		@Timed(value = "my.long.request", extraTags = { "region", "test" },
-				longTask = true)
+		@Timed(value = "my.long.request", extraTags = { "region", "test" }, longTask = true)
 		@GetMapping("/callable/{id}")
-		public Callable<String> asyncCallable(@PathVariable Long id) throws Exception {
+		Callable<String> asyncCallable(@PathVariable Long id) throws Exception {
 			this.callableBarrier.await();
 			return () -> {
 				try {

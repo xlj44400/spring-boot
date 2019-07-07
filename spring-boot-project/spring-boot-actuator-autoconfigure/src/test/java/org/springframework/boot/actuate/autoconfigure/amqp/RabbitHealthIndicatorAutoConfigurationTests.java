@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.boot.actuate.autoconfigure.amqp;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.actuate.amqp.RabbitHealthIndicator;
 import org.springframework.boot.actuate.autoconfigure.health.HealthIndicatorAutoConfiguration;
@@ -32,25 +32,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Phillip Webb
  */
-public class RabbitHealthIndicatorAutoConfigurationTests {
+class RabbitHealthIndicatorAutoConfigurationTests {
 
 	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(RabbitAutoConfiguration.class,
-					RabbitHealthIndicatorAutoConfiguration.class,
-					HealthIndicatorAutoConfiguration.class));
+					RabbitHealthIndicatorAutoConfiguration.class, HealthIndicatorAutoConfiguration.class));
 
 	@Test
-	public void runShouldCreateIndicator() {
-		this.contextRunner.run((context) -> assertThat(context)
-				.hasSingleBean(RabbitHealthIndicator.class)
+	void runShouldCreateIndicator() {
+		this.contextRunner.run((context) -> assertThat(context).hasSingleBean(RabbitHealthIndicator.class)
 				.doesNotHaveBean(ApplicationHealthIndicator.class));
 	}
 
 	@Test
-	public void runWhenDisabledShouldNotCreateIndicator() {
+	void runWhenDisabledShouldNotCreateIndicator() {
 		this.contextRunner.withPropertyValues("management.health.rabbit.enabled:false")
-				.run((context) -> assertThat(context)
-						.doesNotHaveBean(RabbitHealthIndicator.class)
+				.run((context) -> assertThat(context).doesNotHaveBean(RabbitHealthIndicator.class)
 						.hasSingleBean(ApplicationHealthIndicator.class));
 	}
 

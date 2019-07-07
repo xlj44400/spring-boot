@@ -16,21 +16,19 @@
 
 package org.springframework.boot.test.autoconfigure.data.neo4j;
 
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 import org.neo4j.ogm.session.Session;
 import org.testcontainers.containers.Neo4jContainer;
+import org.testcontainers.junit.jupiter.Container;
 
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.util.TestPropertyValues;
-import org.springframework.boot.testsupport.testcontainers.SkippableContainer;
+import org.springframework.boot.testsupport.testcontainers.DisabledWithoutDockerTestcontainers;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -42,14 +40,13 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  * @author Stephane Nicoll
  * @author Michael Simons
  */
-@RunWith(SpringRunner.class)
 @ContextConfiguration(initializers = DataNeo4jTestIntegrationTests.Initializer.class)
 @DataNeo4jTest
-public class DataNeo4jTestIntegrationTests {
+@DisabledWithoutDockerTestcontainers
+class DataNeo4jTestIntegrationTests {
 
-	@ClassRule
-	public static SkippableContainer<Neo4jContainer<?>> neo4j = new SkippableContainer<>(
-			() -> new Neo4jContainer<>().withAdminPassword(null));
+	@Container
+	static final Neo4jContainer<?> neo4j = new Neo4jContainer<>().withAdminPassword(null);
 
 	@Autowired
 	private Session session;
@@ -61,7 +58,7 @@ public class DataNeo4jTestIntegrationTests {
 	private ApplicationContext applicationContext;
 
 	@Test
-	public void testRepository() {
+	void testRepository() {
 		ExampleGraph exampleGraph = new ExampleGraph();
 		exampleGraph.setDescription("Look, new @DataNeo4jTest!");
 		assertThat(exampleGraph.getId()).isNull();
@@ -71,19 +68,16 @@ public class DataNeo4jTestIntegrationTests {
 	}
 
 	@Test
-	public void didNotInjectExampleService() {
+	void didNotInjectExampleService() {
 		assertThatExceptionOfType(NoSuchBeanDefinitionException.class)
 				.isThrownBy(() -> this.applicationContext.getBean(ExampleService.class));
 	}
 
-	static class Initializer
-			implements ApplicationContextInitializer<ConfigurableApplicationContext> {
+	static class Initializer implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 
 		@Override
-		public void initialize(
-				ConfigurableApplicationContext configurableApplicationContext) {
-			TestPropertyValues
-					.of("spring.data.neo4j.uri=" + neo4j.getContainer().getBoltUrl())
+		public void initialize(ConfigurableApplicationContext configurableApplicationContext) {
+			TestPropertyValues.of("spring.data.neo4j.uri=" + neo4j.getBoltUrl())
 					.applyTo(configurableApplicationContext.getEnvironment());
 		}
 

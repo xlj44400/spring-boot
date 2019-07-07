@@ -16,15 +16,15 @@
 
 package org.springframework.boot.test.mock.mockito;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -35,8 +35,8 @@ import static org.mockito.Mockito.mock;
  *
  * @author Phillip Webb
  */
-@RunWith(SpringRunner.class)
-public class MockBeanForBeanFactoryIntegrationTests {
+@ExtendWith(SpringExtension.class)
+class MockBeanForBeanFactoryIntegrationTests {
 
 	// gh-7439
 
@@ -48,7 +48,7 @@ public class MockBeanForBeanFactoryIntegrationTests {
 
 	@Test
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public void testName() {
+	void testName() {
 		TestBean testBean = mock(TestBean.class);
 		given(testBean.hello()).willReturn("amock");
 		given(this.testFactoryBean.getObjectType()).willReturn((Class) TestBean.class);
@@ -61,7 +61,7 @@ public class MockBeanForBeanFactoryIntegrationTests {
 	static class Config {
 
 		@Bean
-		public TestFactoryBean testFactoryBean() {
+		TestFactoryBean testFactoryBean() {
 			return new TestFactoryBean();
 		}
 
