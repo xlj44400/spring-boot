@@ -31,11 +31,7 @@ import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.rsocket.messaging.RSocketStrategiesCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.codec.CharSequenceEncoder;
-import org.springframework.core.codec.StringDecoder;
-import org.springframework.core.io.buffer.NettyDataBufferFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.cbor.Jackson2CborDecoder;
 import org.springframework.http.codec.cbor.Jackson2CborEncoder;
@@ -43,6 +39,8 @@ import org.springframework.http.codec.json.Jackson2JsonDecoder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.messaging.rsocket.RSocketStrategies;
+import org.springframework.util.ClassUtils;
+import org.springframework.web.util.pattern.PathPatternRouteMatcher;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for {@link RSocketStrategies}.
@@ -55,15 +53,16 @@ import org.springframework.messaging.rsocket.RSocketStrategies;
 @AutoConfigureAfter(JacksonAutoConfiguration.class)
 public class RSocketStrategiesAutoConfiguration {
 
+	private static final String PATHPATTERN_ROUTEMATCHER_CLASS = "org.springframework.web.util.pattern.PathPatternRouteMatcher";
+
 	@Bean
 	@ConditionalOnMissingBean
 	public RSocketStrategies rSocketStrategies(ObjectProvider<RSocketStrategiesCustomizer> customizers) {
 		RSocketStrategies.Builder builder = RSocketStrategies.builder();
-		builder.reactiveAdapterStrategy(ReactiveAdapterRegistry.getSharedInstance());
+		if (ClassUtils.isPresent(PATHPATTERN_ROUTEMATCHER_CLASS, null)) {
+			builder.routeMatcher(new PathPatternRouteMatcher());
+		}
 		customizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
-		builder.decoder(StringDecoder.allMimeTypes());
-		builder.encoder(CharSequenceEncoder.allMimeTypes());
-		builder.dataBufferFactory(new NettyDataBufferFactory(PooledByteBufAllocator.DEFAULT));
 		return builder.build();
 	}
 
@@ -78,7 +77,7 @@ public class RSocketStrategiesAutoConfiguration {
 		@ConditionalOnBean(Jackson2ObjectMapperBuilder.class)
 		public RSocketStrategiesCustomizer jacksonCborRSocketStrategyCustomizer(Jackson2ObjectMapperBuilder builder) {
 			return (strategy) -> {
-				ObjectMapper objectMapper = builder.factory(new CBORFactory()).build();
+				ObjectMapper objectMapper = builder.createXmlMapper(false).factory(new CBORFactory()).build();
 				strategy.decoder(new Jackson2CborDecoder(objectMapper, SUPPORTED_TYPES));
 				strategy.encoder(new Jackson2CborEncoder(objectMapper, SUPPORTED_TYPES));
 			};

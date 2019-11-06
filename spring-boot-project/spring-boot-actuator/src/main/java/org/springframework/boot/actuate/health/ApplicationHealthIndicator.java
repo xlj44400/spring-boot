@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,9 @@ package org.springframework.boot.actuate.health;
  * @author Christian Dupuis
  * @since 1.2.0
  * @see Status#UP
+ * @deprecated since 2.2 in favor of {@link PingHealthIndicator}.
  */
+@Deprecated
 public class ApplicationHealthIndicator extends AbstractHealthIndicator {
 
 	public ApplicationHealthIndicator() {

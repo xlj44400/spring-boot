@@ -16,7 +16,16 @@
 
 package org.springframework.boot.context.embedded;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +47,16 @@ public class EmbeddedServletContainerWarPackagingIntegrationTests {
 	public void nestedMetaInfResourceIsAvailableViaHttp(RestTemplate rest) {
 		ResponseEntity<String> entity = rest.getForEntity("/nested-meta-inf-resource.txt", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+	}
+
+	@TestTemplate
+	@DisabledOnOs(OS.WINDOWS)
+	public void nestedMetaInfResourceWithNameThatContainsReservedCharactersIsAvailableViaHttp(RestTemplate rest) {
+		ResponseEntity<String> entity = rest.getForEntity(
+				"/nested-reserved-%21%23%24%25%26%28%29%2A%2B%2C%3A%3D%3F%40%5B%5D-meta-inf-resource.txt",
+				String.class);
+		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(entity.getBody()).isEqualTo("encoded-name");
 	}
 
 	@TestTemplate
@@ -73,6 +92,26 @@ public class EmbeddedServletContainerWarPackagingIntegrationTests {
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 		entity = rest.getForEntity("/org/springframework/../springframework/boot/loader/Launcher.class", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+	}
+
+	@TestTemplate
+	public void loaderClassesAreNotAvailableViaResourcePaths(RestTemplate rest) {
+		ResponseEntity<String> entity = rest.getForEntity("/resourcePaths", String.class);
+		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(readLines(entity.getBody()))
+				.noneMatch((resourcePath) -> resourcePath.startsWith("/org/springframework/boot/loader"));
+	}
+
+	private List<String> readLines(String input) {
+		if (input == null) {
+			return Collections.emptyList();
+		}
+		try (BufferedReader reader = new BufferedReader(new StringReader(input))) {
+			return reader.lines().collect(Collectors.toList());
+		}
+		catch (IOException ex) {
+			throw new RuntimeException("Failed to read lines from input '" + input + "'");
+		}
 	}
 
 }

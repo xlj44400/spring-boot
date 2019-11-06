@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.springframework.aop.scope.ScopedObject;
 import org.springframework.aop.scope.ScopedProxyUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.PropertyValues;
@@ -78,8 +79,6 @@ import org.springframework.util.StringUtils;
 public class MockitoPostProcessor extends InstantiationAwareBeanPostProcessorAdapter
 		implements BeanClassLoaderAware, BeanFactoryAware, BeanFactoryPostProcessor, Ordered {
 
-	private static final String FACTORY_BEAN_OBJECT_TYPE = "factoryBeanObjectType";
-
 	private static final String BEAN_NAME = MockitoPostProcessor.class.getName();
 
 	private static final String CONFIGURATION_CLASS_ATTRIBUTE = Conventions
@@ -125,7 +124,7 @@ public class MockitoPostProcessor extends InstantiationAwareBeanPostProcessorAda
 	@Override
 	public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
 		Assert.isInstanceOf(BeanDefinitionRegistry.class, beanFactory,
-				"@MockBean can only be used on bean factories that " + "implement BeanDefinitionRegistry");
+				"@MockBean can only be used on bean factories that implement BeanDefinitionRegistry");
 		postProcessBeanFactory(beanFactory, (BeanDefinitionRegistry) beanFactory);
 	}
 
@@ -254,7 +253,7 @@ public class MockitoPostProcessor extends InstantiationAwareBeanPostProcessorAda
 		for (String beanName : beanFactory.getBeanNamesForType(FactoryBean.class)) {
 			beanName = BeanFactoryUtils.transformedBeanName(beanName);
 			BeanDefinition beanDefinition = beanFactory.getBeanDefinition(beanName);
-			if (typeName.equals(beanDefinition.getAttribute(FACTORY_BEAN_OBJECT_TYPE))) {
+			if (typeName.equals(beanDefinition.getAttribute(FactoryBean.OBJECT_TYPE_ATTRIBUTE))) {
 				beans.add(beanName);
 			}
 		}
@@ -359,6 +358,9 @@ public class MockitoPostProcessor extends InstantiationAwareBeanPostProcessorAda
 			Assert.state(ReflectionUtils.getField(field, target) == null,
 					() -> "The field " + field + " cannot have an existing value");
 			Object bean = this.beanFactory.getBean(beanName, field.getType());
+			if (bean instanceof ScopedObject) {
+				bean = ((ScopedObject) bean).getTargetObject();
+			}
 			ReflectionUtils.setField(field, target, bean);
 		}
 		catch (Throwable ex) {
@@ -444,15 +446,22 @@ public class MockitoPostProcessor extends InstantiationAwareBeanPostProcessorAda
 
 		@Override
 		public Object getEarlyBeanReference(Object bean, String beanName) throws BeansException {
-			return this.mockitoPostProcessor.createSpyIfNecessary(bean, beanName);
+			return this.mockitoPostProcessor.createSpyIfNecessary(bean, getOriginalBeanNameIfScopedTarget(beanName));
 		}
 
 		@Override
 		public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-			if (bean instanceof FactoryBean) {
+			if (bean instanceof FactoryBean || bean instanceof ScopedObject) {
 				return bean;
 			}
-			return this.mockitoPostProcessor.createSpyIfNecessary(bean, beanName);
+			return this.mockitoPostProcessor.createSpyIfNecessary(bean, getOriginalBeanNameIfScopedTarget(beanName));
+		}
+
+		private String getOriginalBeanNameIfScopedTarget(String beanName) {
+			if (ScopedProxyUtils.isScopedTarget(beanName)) {
+				return beanName.substring("scopedTarget.".length());
+			}
+			return beanName;
 		}
 
 		static void register(BeanDefinitionRegistry registry) {

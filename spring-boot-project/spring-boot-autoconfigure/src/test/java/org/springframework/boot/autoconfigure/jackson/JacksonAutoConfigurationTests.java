@@ -80,6 +80,7 @@ class JacksonAutoConfigurationTests {
 			.withConfiguration(AutoConfigurations.of(JacksonAutoConfiguration.class));
 
 	@Test
+	@Deprecated
 	void registersJodaModuleAutomatically() {
 		this.contextRunner.run((context) -> {
 			ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
@@ -116,6 +117,7 @@ class JacksonAutoConfigurationTests {
 	}
 
 	@Test
+	@Deprecated
 	void customJodaDateTimeFormat() throws Exception {
 		this.contextRunner.withPropertyValues("spring.jackson.date-format:yyyyMMddHHmmss",
 				"spring.jackson.joda-date-time-format:yyyy-MM-dd HH:mm:ss").run((context) -> {
@@ -336,6 +338,7 @@ class JacksonAutoConfigurationTests {
 	}
 
 	@Test
+	@Deprecated
 	void customLocaleWithJodaTime() throws JsonProcessingException {
 		this.contextRunner.withPropertyValues("spring.jackson.locale:de_DE", "spring.jackson.date-format:zzzz",
 				"spring.jackson.serialization.write-dates-with-zone-id:true").run((context) -> {
@@ -386,6 +389,16 @@ class JacksonAutoConfigurationTests {
 					assertThat(json).contains("property2");
 					assertThat(json).doesNotContain("property3");
 				});
+	}
+
+	@Test
+	void builderIsNotSharedAcrossMultipleInjectionPoints() {
+		this.contextRunner.withUserConfiguration(ObjectMapperBuilderConsumerConfig.class).run((context) -> {
+			ObjectMapperBuilderConsumerConfig consumer = context.getBean(ObjectMapperBuilderConsumerConfig.class);
+			assertThat(consumer.builderOne).isNotNull();
+			assertThat(consumer.builderTwo).isNotNull();
+			assertThat(consumer.builderOne).isNotSameAs(consumer.builderTwo);
+		});
 	}
 
 	private void assertParameterNamesModuleCreatorBinding(Mode expectedMode, Class<?>... configClasses) {
@@ -472,6 +485,27 @@ class JacksonAutoConfigurationTests {
 		@Bean
 		Jackson2ObjectMapperBuilderCustomizer customDateFormat() {
 			return (builder) -> builder.dateFormat(new MyDateFormat());
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class ObjectMapperBuilderConsumerConfig {
+
+		Jackson2ObjectMapperBuilder builderOne;
+
+		Jackson2ObjectMapperBuilder builderTwo;
+
+		@Bean
+		String consumerOne(Jackson2ObjectMapperBuilder builder) {
+			this.builderOne = builder;
+			return "one";
+		}
+
+		@Bean
+		String consumerTwo(Jackson2ObjectMapperBuilder builder) {
+			this.builderTwo = builder;
+			return "two";
 		}
 
 	}

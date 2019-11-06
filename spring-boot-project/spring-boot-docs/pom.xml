@@ -15,6 +15,11 @@
 		<main.basedir>${basedir}/../..</main.basedir>
 		<refdocs.build.directory>${project.build.directory}/refdocs/</refdocs.build.directory>
 	</properties>
+	<scm>
+		<url>${git.url}</url>
+		<connection>${git.connection}</connection>
+		<developerConnection>${git.developerConnection}</developerConnection>
+	</scm>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -204,11 +209,6 @@
 			<optional>true</optional>
 		</dependency>
 		<dependency>
-			<groupId>com.timgroup</groupId>
-			<artifactId>java-statsd-client</artifactId>
-			<optional>true</optional>
-		</dependency>
-		<dependency>
 			<groupId>com.unboundid</groupId>
 			<artifactId>unboundid-ldapsdk</artifactId>
 			<optional>true</optional>
@@ -321,6 +321,11 @@
 		<dependency>
 			<groupId>io.micrometer</groupId>
 			<artifactId>micrometer-registry-wavefront</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>io.projectreactor</groupId>
+			<artifactId>reactor-tools</artifactId>
 			<optional>true</optional>
 		</dependency>
 		<dependency>
@@ -944,6 +949,15 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-rsocket</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-saml2-service-provider</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-test</artifactId>
 			<optional>true</optional>
 		</dependency>
@@ -981,6 +995,11 @@
 		<dependency>
 			<groupId>org.springframework.data</groupId>
 			<artifactId>spring-data-cassandra</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.data</groupId>
+			<artifactId>spring-data-commons</artifactId>
 			<optional>true</optional>
 		</dependency>
 		<dependency>
@@ -1188,7 +1207,7 @@
 									<goal>wget</goal>
 								</goals>
 								<configuration>
-									<url>https://repo.spring.io/release/io/spring/docresources/spring-doc-resources/${spring-doc-resources.version}/spring-doc-resources-${spring-doc-resources.version}.zip</url>
+									<url>${spring-doc-resources.url}</url>
 									<unpack>true</unpack>
 									<outputDirectory>${refdocs.build.directory}</outputDirectory>
 								</configuration>
@@ -1376,29 +1395,55 @@
 						<version>1.0.1</version>
 						<executions>
 							<execution>
+								<id>transform-effective-pom</id>
 								<goals>
 									<goal>transform</goal>
 								</goals>
+								<configuration>
+									<transformationSets>
+										<transformationSet>
+											<dir>${project.build.directory}/external-resources</dir>
+											<includes>
+												<include>effective-pom.xml</include>
+											</includes>
+											<stylesheet>src/main/xslt/dependencyVersions.xsl</stylesheet>
+											<fileMappers>
+												<fileMapper
+													implementation="org.codehaus.plexus.components.io.filemappers.FileExtensionMapper">
+													<targetExtension>.adoc</targetExtension>
+												</fileMapper>
+											</fileMappers>
+											<outputDir>${project.build.directory}/generated-resources</outputDir>
+										</transformationSet>
+									</transformationSets>
+								</configuration>
+							</execution>
+							<execution>
+								<id>transform-flattened-pom</id>
+								<phase>process-resources</phase>
+								<goals>
+									<goal>transform</goal>
+								</goals>
+								<configuration>
+									<transformationSets>
+										<transformationSet>
+											<dir>${project.basedir}</dir>
+											<includes>
+												<include>.flattened-pom.xml</include>
+											</includes>
+											<stylesheet>src/main/xslt/versionProperties.xsl</stylesheet>
+											<fileMappers>
+												<fileMapper
+													implementation="org.codehaus.plexus.components.io.filemappers.FileExtensionMapper">
+													<targetExtension>.properties</targetExtension>
+												</fileMapper>
+											</fileMappers>
+											<outputDir>${project.build.directory}/generated-resources</outputDir>
+										</transformationSet>
+									</transformationSets>
+								</configuration>
 							</execution>
 						</executions>
-						<configuration>
-							<transformationSets>
-								<transformationSet>
-									<dir>${project.build.directory}/external-resources</dir>
-									<includes>
-										<include>effective-pom.xml</include>
-									</includes>
-									<stylesheet>src/main/xslt/dependencyVersions.xsl</stylesheet>
-									<fileMappers>
-										<fileMapper
-											implementation="org.codehaus.plexus.components.io.filemappers.FileExtensionMapper">
-											<targetExtension>.adoc</targetExtension>
-										</fileMapper>
-									</fileMappers>
-									<outputDir>${project.build.directory}/generated-resources</outputDir>
-								</transformationSet>
-							</transformationSets>
-						</configuration>
 					</plugin>
 					<plugin>
 						<groupId>org.codehaus.gmavenplus</groupId>
@@ -1438,6 +1483,26 @@
 						</dependencies>
 					</plugin>
 					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>properties-maven-plugin</artifactId>
+						<version>1.0.0</version>
+						<executions>
+							<execution>
+								<id>read-flattenedpom-versions</id>
+								<phase>prepare-package</phase>
+								<goals>
+									<goal>read-project-properties</goal>
+								</goals>
+								<inherited>false</inherited>
+								<configuration>
+									<files>
+										<file>${project.build.directory}/generated-resources/.flattened-pom.properties</file>
+									</files>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
 						<groupId>org.asciidoctor</groupId>
 						<artifactId>asciidoctor-maven-plugin</artifactId>
 						<configuration>
@@ -1451,20 +1516,51 @@
 								</resource>
 							</resources>
 							<attributes>
+								<spring-boot-artifactory-repo>${spring-boot-artifactory-repo}</spring-boot-artifactory-repo>
+								<github-tag>${github-tag}</github-tag>
 								<sources-root>${project.basedir}/src</sources-root>
 								<asciidoc-sources-root>${project.basedir}/src/main/asciidoc</asciidoc-sources-root>
 								<generated-resources-root>${project.basedir}/target/generated-resources</generated-resources-root>
-								<spring-boot-repo>${spring-boot-repo}</spring-boot-repo>
-								<github-tag>${github-tag}</github-tag>
+								<jetty-version>${jetty.version}</jetty-version>
 								<jooq-version>${jooq.version}</jooq-version>
-								<spring-boot-docs-version>${revision}</spring-boot-docs-version>
 								<spring-boot-version>${revision}</spring-boot-version>
-								<spring-docs-version>${spring-framework.version}</spring-docs-version>
+								<spring-amqp-version>${spring-amqp.version}</spring-amqp-version>
+								<spring-data-couchbase-version>${flattenedpom.version.org.springframework.data.spring-data-couchbase}</spring-data-couchbase-version>
+								<spring-data-commons-version>${flattenedpom.version.org.springframework.data.spring-data-commons}</spring-data-commons-version>
+								<spring-data-jpa-version>${flattenedpom.version.org.springframework.data.spring-data-jpa}</spring-data-jpa-version>
+								<spring-data-jdbc-version>${flattenedpom.version.org.springframework.data.spring-data-jdbc}</spring-data-jdbc-version>
+								<spring-data-mongodb-version>${flattenedpom.version.org.springframework.data.spring-data-mongodb}</spring-data-mongodb-version>
+								<spring-data-neo4j-version>${flattenedpom.version.org.springframework.data.spring-data-neo4j}</spring-data-neo4j-version>
+								<spring-data-rest-version>${flattenedpom.version.org.springframework.data.spring-data-rest-core}</spring-data-rest-version>
+								<spring-data-solr-version>${flattenedpom.version.org.springframework.data.spring-data-solr}</spring-data-solr-version>
 								<spring-framework-version>${spring-framework.version}</spring-framework-version>
-								<spring-security-docs-version>${spring-security.version}</spring-security-docs-version>
-								<spring-webservices-docs-version>${spring-ws.version}</spring-webservices-docs-version>
+								<spring-integration-version>${spring-integration.version}</spring-integration-version>
+								<spring-security-version>${spring-security.version}</spring-security-version>
+								<spring-webservices-version>${spring-ws.version}</spring-webservices-version>
 							</attributes>
 						</configuration>
+						<dependencies>
+							<dependency>
+								<groupId>io.spring.asciidoctor</groupId>
+								<artifactId>spring-asciidoctor-extensions-spring-boot</artifactId>
+								<version>${spring-asciidoctor-extensions.version}</version>
+							</dependency>
+							<dependency>
+								<groupId>org.springframework.boot</groupId>
+								<artifactId>spring-boot-actuator-autoconfigure</artifactId>
+								<version>${revision}</version>
+							</dependency>
+							<dependency>
+								<groupId>org.springframework.boot</groupId>
+								<artifactId>spring-boot-autoconfigure</artifactId>
+								<version>${revision}</version>
+							</dependency>
+							<dependency>
+								<groupId>org.springframework.boot</groupId>
+								<artifactId>spring-boot-devtools</artifactId>
+								<version>${revision}</version>
+							</dependency>
+						</dependencies>
 						<executions>
 							<execution>
 								<id>generate-html-documentation</id>
@@ -1475,15 +1571,15 @@
 								<configuration>
 									<backend>html5</backend>
 									<sourceDocumentExtensions>
-										<sourceDocumentExtension>adoc</sourceDocumentExtension>
-										<sourceDocumentExtension>htmladoc</sourceDocumentExtension>
+										<sourceDocumentExtension>.adoc</sourceDocumentExtension>
+										<sourceDocumentExtension>.htmladoc</sourceDocumentExtension>
 									</sourceDocumentExtensions>
 									<outputDirectory>${project.build.directory}/generated-docs/reference/html</outputDirectory>
 									<sourceHighlighter>highlight.js</sourceHighlighter>
 									<doctype>book</doctype>
 									<attributes>
 										<highlightjsdir>js/highlight</highlightjsdir>
-										<highlightjs-theme>atom-one-dark-reasonable</highlightjs-theme>
+										<highlightjs-theme>github</highlightjs-theme>
 										<linkcss>true</linkcss>
 										<imagesdir>./images</imagesdir>
 										<icons>font</icons>
@@ -1492,9 +1588,9 @@
 										<attribute-missing>warn</attribute-missing>
 									</attributes>
 									<logHandler>
-										<outputToConsole>true</outputToConsole>
+										<outputToConsole>false</outputToConsole>
 										<failIf>
-											<severity>DEBUG</severity>
+											<severity>INFO</severity>
 										</failIf>
 									</logHandler>
 								</configuration>
@@ -1508,20 +1604,26 @@
 								<configuration>
 									<backend>html5</backend>
 									<sourceDocumentExtensions>
-										<sourceDocumentExtension>htmlsingleadoc</sourceDocumentExtension>
+										<sourceDocumentExtension>.htmlsingleadoc</sourceDocumentExtension>
 									</sourceDocumentExtensions>
 									<outputDirectory>${project.build.directory}/generated-docs/reference/htmlsingle</outputDirectory>
 									<sourceHighlighter>highlight.js</sourceHighlighter>
 									<doctype>book</doctype>
 									<attributes>
 										<highlightjsdir>js/highlight</highlightjsdir>
-										<highlightjs-theme>atom-one-dark-reasonable</highlightjs-theme>
+										<highlightjs-theme>github</highlightjs-theme>
 										<linkcss>true</linkcss>
 										<imagesdir>./images</imagesdir>
 										<icons>font</icons>
 										<stylesdir>css/</stylesdir>
 										<stylesheet>spring.css</stylesheet>
 									</attributes>
+									<logHandler>
+										<outputToConsole>false</outputToConsole>
+										<failIf>
+											<severity>INFO</severity>
+										</failIf>
+									</logHandler>
 								</configuration>
 							</execution>
 							<execution>
@@ -1614,7 +1716,7 @@
 											input="${version-type}" regexp="(RC)\d+" replace="MILESTONE" />
 										<propertyregex property="version-type" override="true"
 											input="${version-type}" regexp="BUILD-(.*)" replace="SNAPSHOT" />
-										<stringutil string="${version-type}" property="spring-boot-repo">
+										<stringutil string="${version-type}" property="spring-boot-artifactory-repo">
 											<lowercase />
 										</stringutil>
 										<var name="github-tag" value="v${revision}" />

@@ -225,7 +225,7 @@ class TomcatServletWebServerFactoryTests extends AbstractServletWebServerFactory
 		factory.addAdditionalTomcatConnectors(connectors);
 		this.webServer = factory.getWebServer();
 		Map<Service, Connector[]> connectorsByService = ((TomcatWebServer) this.webServer).getServiceConnectors();
-		assertThat(connectorsByService.values().iterator().next().length).isEqualTo(connectors.length + 1);
+		assertThat(connectorsByService.values().iterator().next()).hasSize(connectors.length + 1);
 	}
 
 	@Test
@@ -328,9 +328,9 @@ class TomcatServletWebServerFactoryTests extends AbstractServletWebServerFactory
 	}
 
 	@Test
-	void startupFailureDoesNotResultInUnstoppedThreadsBeingReported(CapturedOutput capturedOutput) throws IOException {
+	void startupFailureDoesNotResultInUnstoppedThreadsBeingReported(CapturedOutput output) throws IOException {
 		super.portClashOfPrimaryConnectorResultsInPortInUseException();
-		assertThat(capturedOutput).doesNotContain("appears to have started a thread named [main]");
+		assertThat(output).doesNotContain("appears to have started a thread named [main]");
 	}
 
 	@Test
@@ -538,6 +538,14 @@ class TomcatServletWebServerFactoryTests extends AbstractServletWebServerFactory
 		};
 		assertThatExceptionOfType(WebServerException.class).isThrownBy(
 				() -> factory.getWebServer((context) -> context.addListener(new FailingServletContextListener())));
+	}
+
+	@Test
+	void registerJspServletWithDefaultLoadOnStartup() {
+		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory(0);
+		factory.addInitializers((context) -> context.addServlet("manually-registered-jsp-servlet", JspServlet.class));
+		this.webServer = factory.getWebServer();
+		this.webServer.start();
 	}
 
 	@Override

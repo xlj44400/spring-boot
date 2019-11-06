@@ -19,10 +19,10 @@ package org.springframework.boot.test.autoconfigure.data.neo4j;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.util.TestPropertyValues;
-import org.springframework.boot.testsupport.testcontainers.DisabledWithoutDockerTestcontainers;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
@@ -36,13 +36,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Artsiom Yudovin
  */
-@DisabledWithoutDockerTestcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ContextConfiguration(initializers = DataNeo4jTestPropertiesIntegrationTests.Initializer.class)
 @DataNeo4jTest(properties = "spring.profiles.active=test")
 class DataNeo4jTestPropertiesIntegrationTests {
 
 	@Container
-	static final Neo4jContainer<?> neo4j = new Neo4jContainer<>().withAdminPassword(null);
+	static final Neo4jContainer<?> neo4j = new Neo4jContainer<>().withoutAuthentication();
 
 	@Autowired
 	private Environment environment;

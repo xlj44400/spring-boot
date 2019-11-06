@@ -17,9 +17,7 @@
 package org.springframework.boot.autoconfigure.web.servlet;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -35,6 +33,7 @@ import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -66,7 +65,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -106,7 +104,6 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurationSupport;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.handler.AbstractHandlerExceptionResolver;
-import org.springframework.web.servlet.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver;
 import org.springframework.web.servlet.i18n.FixedLocaleResolver;
 import org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver;
@@ -114,7 +111,6 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.servlet.resource.AppCacheManifestTransformer;
 import org.springframework.web.servlet.resource.EncodedResourceResolver;
-import org.springframework.web.servlet.resource.ResourceHttpRequestHandler;
 import org.springframework.web.servlet.resource.ResourceResolver;
 import org.springframework.web.servlet.resource.ResourceUrlProvider;
 import org.springframework.web.servlet.resource.VersionResourceResolver;
@@ -165,13 +161,20 @@ public class WebMvcAutoConfiguration {
 		return new OrderedFormContentFilter();
 	}
 
+	static String[] getResourceLocations(String[] staticLocations) {
+		String[] locations = new String[staticLocations.length + SERVLET_LOCATIONS.length];
+		System.arraycopy(staticLocations, 0, locations, 0, staticLocations.length);
+		System.arraycopy(SERVLET_LOCATIONS, 0, locations, staticLocations.length, SERVLET_LOCATIONS.length);
+		return locations;
+	}
+
 	// Defined as a nested config to ensure WebMvcConfigurer is not read when not
 	// on the classpath
 	@Configuration(proxyBeanMethods = false)
 	@Import(EnableWebMvcConfiguration.class)
 	@EnableConfigurationProperties({ WebMvcProperties.class, ResourceProperties.class })
 	@Order(0)
-	public static class WebMvcAutoConfigurationAdapter implements WebMvcConfigurer, ResourceLoaderAware {
+	public static class WebMvcAutoConfigurationAdapter implements WebMvcConfigurer {
 
 		private static final Log logger = LogFactory.getLog(WebMvcConfigurer.class);
 
@@ -185,8 +188,6 @@ public class WebMvcAutoConfiguration {
 
 		final ResourceHandlerRegistrationCustomizer resourceHandlerRegistrationCustomizer;
 
-		private ResourceLoader resourceLoader;
-
 		public WebMvcAutoConfigurationAdapter(ResourceProperties resourceProperties, WebMvcProperties mvcProperties,
 				ListableBeanFactory beanFactory, ObjectProvider<HttpMessageConverters> messageConvertersProvider,
 				ObjectProvider<ResourceHandlerRegistrationCustomizer> resourceHandlerRegistrationCustomizerProvider) {
@@ -195,11 +196,6 @@ public class WebMvcAutoConfiguration {
 			this.beanFactory = beanFactory;
 			this.messageConvertersProvider = messageConvertersProvider;
 			this.resourceHandlerRegistrationCustomizer = resourceHandlerRegistrationCustomizerProvider.getIfAvailable();
-		}
-
-		@Override
-		public void setResourceLoader(ResourceLoader resourceLoader) {
-			this.resourceLoader = resourceLoader;
 		}
 
 		@Override
@@ -324,17 +320,87 @@ public class WebMvcAutoConfiguration {
 			return (cachePeriod != null) ? (int) cachePeriod.getSeconds() : null;
 		}
 
-		@Bean
-		public WelcomePageHandlerMapping welcomePageHandlerMapping(ApplicationContext applicationContext) {
-			return new WelcomePageHandlerMapping(new TemplateAvailabilityProviders(applicationContext),
-					applicationContext, getWelcomePage(), this.mvcProperties.getStaticPathPattern());
+		private void customizeResourceHandlerRegistration(ResourceHandlerRegistration registration) {
+			if (this.resourceHandlerRegistrationCustomizer != null) {
+				this.resourceHandlerRegistrationCustomizer.customize(registration);
+			}
 		}
 
-		static String[] getResourceLocations(String[] staticLocations) {
-			String[] locations = new String[staticLocations.length + SERVLET_LOCATIONS.length];
-			System.arraycopy(staticLocations, 0, locations, 0, staticLocations.length);
-			System.arraycopy(SERVLET_LOCATIONS, 0, locations, staticLocations.length, SERVLET_LOCATIONS.length);
-			return locations;
+		@Bean
+		@ConditionalOnMissingBean({ RequestContextListener.class, RequestContextFilter.class })
+		@ConditionalOnMissingFilterBean(RequestContextFilter.class)
+		public static RequestContextFilter requestContextFilter() {
+			return new OrderedRequestContextFilter();
+		}
+
+	}
+
+	/**
+	 * Configuration equivalent to {@code @EnableWebMvc}.
+	 */
+	@Configuration(proxyBeanMethods = false)
+	public static class EnableWebMvcConfiguration extends DelegatingWebMvcConfiguration implements ResourceLoaderAware {
+
+		private final ResourceProperties resourceProperties;
+
+		private final WebMvcProperties mvcProperties;
+
+		private final ListableBeanFactory beanFactory;
+
+		private final WebMvcRegistrations mvcRegistrations;
+
+		private ResourceLoader resourceLoader;
+
+		public EnableWebMvcConfiguration(ResourceProperties resourceProperties,
+				ObjectProvider<WebMvcProperties> mvcPropertiesProvider,
+				ObjectProvider<WebMvcRegistrations> mvcRegistrationsProvider, ListableBeanFactory beanFactory) {
+			this.resourceProperties = resourceProperties;
+			this.mvcProperties = mvcPropertiesProvider.getIfAvailable();
+			this.mvcRegistrations = mvcRegistrationsProvider.getIfUnique();
+			this.beanFactory = beanFactory;
+		}
+
+		@Bean
+		@Override
+		public RequestMappingHandlerAdapter requestMappingHandlerAdapter(
+				@Qualifier("mvcContentNegotiationManager") ContentNegotiationManager contentNegotiationManager,
+				@Qualifier("mvcConversionService") FormattingConversionService conversionService,
+				@Qualifier("mvcValidator") Validator validator) {
+			RequestMappingHandlerAdapter adapter = super.requestMappingHandlerAdapter(contentNegotiationManager,
+					conversionService, validator);
+			adapter.setIgnoreDefaultModelOnRedirect(
+					this.mvcProperties == null || this.mvcProperties.isIgnoreDefaultModelOnRedirect());
+			return adapter;
+		}
+
+		@Override
+		protected RequestMappingHandlerAdapter createRequestMappingHandlerAdapter() {
+			if (this.mvcRegistrations != null && this.mvcRegistrations.getRequestMappingHandlerAdapter() != null) {
+				return this.mvcRegistrations.getRequestMappingHandlerAdapter();
+			}
+			return super.createRequestMappingHandlerAdapter();
+		}
+
+		@Bean
+		@Primary
+		@Override
+		public RequestMappingHandlerMapping requestMappingHandlerMapping(
+				@Qualifier("mvcContentNegotiationManager") ContentNegotiationManager contentNegotiationManager,
+				@Qualifier("mvcConversionService") FormattingConversionService conversionService,
+				@Qualifier("mvcResourceUrlProvider") ResourceUrlProvider resourceUrlProvider) {
+			// Must be @Primary for MvcUriComponentsBuilder to work
+			return super.requestMappingHandlerMapping(contentNegotiationManager, conversionService,
+					resourceUrlProvider);
+		}
+
+		@Bean
+		public WelcomePageHandlerMapping welcomePageHandlerMapping(ApplicationContext applicationContext,
+				FormattingConversionService mvcConversionService, ResourceUrlProvider mvcResourceUrlProvider) {
+			WelcomePageHandlerMapping welcomePageHandlerMapping = new WelcomePageHandlerMapping(
+					new TemplateAvailabilityProviders(applicationContext), applicationContext, getWelcomePage(),
+					this.mvcProperties.getStaticPathPattern());
+			welcomePageHandlerMapping.setInterceptors(getInterceptors(mvcConversionService, mvcResourceUrlProvider));
+			return welcomePageHandlerMapping;
 		}
 
 		private Optional<Resource> getWelcomePage() {
@@ -353,119 +419,6 @@ public class WebMvcAutoConfiguration {
 			catch (Exception ex) {
 				return false;
 			}
-		}
-
-		private void customizeResourceHandlerRegistration(ResourceHandlerRegistration registration) {
-			if (this.resourceHandlerRegistrationCustomizer != null) {
-				this.resourceHandlerRegistrationCustomizer.customize(registration);
-			}
-		}
-
-		@Bean
-		@ConditionalOnMissingBean({ RequestContextListener.class, RequestContextFilter.class })
-		@ConditionalOnMissingFilterBean(RequestContextFilter.class)
-		public static RequestContextFilter requestContextFilter() {
-			return new OrderedRequestContextFilter();
-		}
-
-		@Configuration(proxyBeanMethods = false)
-		@ConditionalOnProperty(value = "spring.mvc.favicon.enabled", matchIfMissing = true)
-		public static class FaviconConfiguration implements ResourceLoaderAware {
-
-			private final ResourceProperties resourceProperties;
-
-			private ResourceLoader resourceLoader;
-
-			public FaviconConfiguration(ResourceProperties resourceProperties) {
-				this.resourceProperties = resourceProperties;
-			}
-
-			@Override
-			public void setResourceLoader(ResourceLoader resourceLoader) {
-				this.resourceLoader = resourceLoader;
-			}
-
-			@Bean
-			public SimpleUrlHandlerMapping faviconHandlerMapping(FaviconRequestHandler handler) {
-				SimpleUrlHandlerMapping mapping = new SimpleUrlHandlerMapping();
-				mapping.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
-				mapping.setUrlMap(Collections.singletonMap("**/favicon.ico", handler));
-				return mapping;
-			}
-
-			@Bean
-			public FaviconRequestHandler faviconRequestHandler() {
-				return new FaviconRequestHandler(resolveFaviconLocations());
-			}
-
-			private List<Resource> resolveFaviconLocations() {
-				String[] staticLocations = getResourceLocations(this.resourceProperties.getStaticLocations());
-				List<Resource> locations = new ArrayList<>(staticLocations.length + 1);
-				Arrays.stream(staticLocations).map(this.resourceLoader::getResource).forEach(locations::add);
-				locations.add(new ClassPathResource("/"));
-				return Collections.unmodifiableList(locations);
-			}
-
-		}
-
-		static final class FaviconRequestHandler extends ResourceHttpRequestHandler {
-
-			FaviconRequestHandler(List<Resource> locations) {
-				setLocations(locations);
-			}
-
-		}
-
-	}
-
-	/**
-	 * Configuration equivalent to {@code @EnableWebMvc}.
-	 */
-	@Configuration(proxyBeanMethods = false)
-	public static class EnableWebMvcConfiguration extends DelegatingWebMvcConfiguration {
-
-		private final WebMvcProperties mvcProperties;
-
-		private final ListableBeanFactory beanFactory;
-
-		private final WebMvcRegistrations mvcRegistrations;
-
-		public EnableWebMvcConfiguration(ObjectProvider<WebMvcProperties> mvcPropertiesProvider,
-				ObjectProvider<WebMvcRegistrations> mvcRegistrationsProvider, ListableBeanFactory beanFactory) {
-			this.mvcProperties = mvcPropertiesProvider.getIfAvailable();
-			this.mvcRegistrations = mvcRegistrationsProvider.getIfUnique();
-			this.beanFactory = beanFactory;
-		}
-
-		@Bean
-		@Override
-		public RequestMappingHandlerAdapter requestMappingHandlerAdapter(
-				ContentNegotiationManager mvcContentNegotiationManager,
-				FormattingConversionService mvcConversionService, Validator mvcValidator) {
-			RequestMappingHandlerAdapter adapter = super.requestMappingHandlerAdapter(mvcContentNegotiationManager,
-					mvcConversionService, mvcValidator);
-			adapter.setIgnoreDefaultModelOnRedirect(
-					this.mvcProperties == null || this.mvcProperties.isIgnoreDefaultModelOnRedirect());
-			return adapter;
-		}
-
-		@Override
-		protected RequestMappingHandlerAdapter createRequestMappingHandlerAdapter() {
-			if (this.mvcRegistrations != null && this.mvcRegistrations.getRequestMappingHandlerAdapter() != null) {
-				return this.mvcRegistrations.getRequestMappingHandlerAdapter();
-			}
-			return super.createRequestMappingHandlerAdapter();
-		}
-
-		@Bean
-		@Primary
-		@Override
-		public RequestMappingHandlerMapping requestMappingHandlerMapping(
-				ContentNegotiationManager mvcContentNegotiationManager,
-				FormattingConversionService mvcConversionService, ResourceUrlProvider mvcResourceUrlProvider) {
-			// Must be @Primary for MvcUriComponentsBuilder to work
-			return super.requestMappingHandlerMapping(mvcContentNegotiationManager, mvcConversionService,
-					mvcResourceUrlProvider);
 		}
 
 		@Bean
@@ -537,6 +490,11 @@ public class WebMvcAutoConfiguration {
 				}
 			}
 			return manager;
+		}
+
+		@Override
+		public void setResourceLoader(ResourceLoader resourceLoader) {
+			this.resourceLoader = resourceLoader;
 		}
 
 	}

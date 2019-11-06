@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import org.springframework.core.log.LogMessage;
 import org.springframework.util.ResourceUtils;
 
 /**
@@ -58,8 +59,8 @@ public class ClassPathFolders implements Iterable<File> {
 				this.folders.add(ResourceUtils.getFile(url));
 			}
 			catch (Exception ex) {
-				logger.warn("Unable to get classpath URL " + url);
-				logger.trace("Unable to get classpath URL " + url, ex);
+				logger.warn(LogMessage.format("Unable to get classpath URL %s", url));
+				logger.trace(LogMessage.format("Unable to get classpath URL %s", url), ex);
 			}
 		}
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,13 +27,20 @@ public final class ActuatorMediaType {
 
 	/**
 	 * Constant for the Actuator V1 media type.
+	 * @deprecated since 2.2.0 as the v1 format is no longer supported
 	 */
+	@Deprecated
 	public static final String V1_JSON = "application/vnd.spring-boot.actuator.v1+json";
 
 	/**
-	 * Constant for the Actuator V2 media type.
+	 * Constant for the Actuator {@link ApiVersion#V2 v2} media type.
 	 */
 	public static final String V2_JSON = "application/vnd.spring-boot.actuator.v2+json";
+
+	/**
+	 * Constant for the Actuator {@link ApiVersion#V3 v3} media type.
+	 */
+	public static final String V3_JSON = "application/vnd.spring-boot.actuator.v3+json";
 
 	private ActuatorMediaType() {
 	}

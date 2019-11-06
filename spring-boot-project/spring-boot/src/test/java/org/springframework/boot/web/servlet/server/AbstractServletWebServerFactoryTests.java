@@ -167,7 +167,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 	}
 
 	@Test
-	void startCalledTwice(CapturedOutput capturedOutput) throws Exception {
+	void startCalledTwice(CapturedOutput output) throws Exception {
 		AbstractServletWebServerFactory factory = getFactory();
 		this.webServer = factory.getWebServer(exampleServletRegistration());
 		this.webServer.start();
@@ -175,7 +175,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		assertThat(this.webServer.getPort()).isEqualTo(port);
 		assertThat(getResponse(getLocalUrl("/hello"))).isEqualTo("Hello World");
-		assertThat(capturedOutput).containsOnlyOnce("started on port");
+		assertThat(output).containsOnlyOnce("started on port");
 	}
 
 	@Test
@@ -264,12 +264,12 @@ public abstract class AbstractServletWebServerFactoryTests {
 	}
 
 	@Test
-	void contextPathIsLoggedOnStartup(CapturedOutput capturedOutput) {
+	void contextPathIsLoggedOnStartup(CapturedOutput output) {
 		AbstractServletWebServerFactory factory = getFactory();
 		factory.setContextPath("/custom");
 		this.webServer = factory.getWebServer(exampleServletRegistration());
 		this.webServer.start();
-		assertThat(capturedOutput).containsOnlyOnce("with context path '/custom'");
+		assertThat(output).containsOnlyOnce("with context path '/custom'");
 	}
 
 	@Test
@@ -397,7 +397,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 				new ExampleServlet(true, false), "/hello");
 		this.webServer = factory.getWebServer(registration);
 		this.webServer.start();
-		TrustStrategy trustStrategy = new SerialNumberValidatingTrustSelfSignedStrategy("5c7ae101");
+		TrustStrategy trustStrategy = new SerialNumberValidatingTrustSelfSignedStrategy("3a3aaec8");
 		SSLContext sslContext = new SSLContextBuilder().loadTrustMaterial(null, trustStrategy).build();
 		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(new SSLConnectionSocketFactory(sslContext))
 				.build();
@@ -459,7 +459,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		keyStore.load(new FileInputStream(new File("src/test/resources/test.p12")), "secret".toCharArray());
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
-						.loadKeyMaterial(keyStore, "secret".toCharArray(), (aliases, socket) -> "spring-boot").build());
+						.loadKeyMaterial(keyStore, "secret".toCharArray()).build());
 		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
@@ -474,9 +474,9 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
 		keyStore.load(new FileInputStream(new File("src/test/resources/test.jks")), "secret".toCharArray());
-		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(new SSLContextBuilder()
-				.loadTrustMaterial(null, new TrustSelfSignedStrategy())
-				.loadKeyMaterial(keyStore, "password".toCharArray(), (aliases, socket) -> "spring-boot").build());
+		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
+				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
+						.loadKeyMaterial(keyStore, "password".toCharArray()).build());
 		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
@@ -545,9 +545,9 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
 		keyStore.load(new FileInputStream(new File("src/test/resources/test.jks")), "secret".toCharArray());
-		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(new SSLContextBuilder()
-				.loadTrustMaterial(null, new TrustSelfSignedStrategy())
-				.loadKeyMaterial(keyStore, "password".toCharArray(), (aliases, socket) -> "spring-boot").build());
+		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
+				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
+						.loadKeyMaterial(keyStore, "password".toCharArray()).build());
 		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
@@ -665,7 +665,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		getResponse(getLocalUrl("/session"));
 		this.webServer.stop();
 		File[] dirContents = sessionStoreDir.listFiles((dir, name) -> !(".".equals(name) || "..".equals(name)));
-		assertThat(dirContents.length).isGreaterThan(0);
+		assertThat(dirContents).isNotEmpty();
 	}
 
 	@Test
@@ -767,8 +767,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer = factory.getWebServer(new ServletRegistrationBean<>(new ExampleServlet(false, true), "/hello"));
 		this.webServer.start();
 		TestGzipInputStreamFactory inputStreamFactory = new TestGzipInputStreamFactory();
-		Map<String, InputStreamFactory> contentDecoderMap = Collections.singletonMap("gzip",
-				(InputStreamFactory) inputStreamFactory);
+		Map<String, InputStreamFactory> contentDecoderMap = Collections.singletonMap("gzip", inputStreamFactory);
 		getResponse(getLocalUrl("/hello"), new HttpComponentsClientHttpRequestFactory(
 				HttpClientBuilder.create().setContentDecoderRegistry(contentDecoderMap).build()));
 		assertThat(inputStreamFactory.wasCompressionUsed()).isTrue();
@@ -779,7 +778,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		AbstractServletWebServerFactory factory = getFactory();
 		this.webServer = factory.getWebServer();
 		Map<String, String> configuredMimeMappings = getActualMimeMappings();
-		Collection<MimeMappings.Mapping> expectedMimeMappings = getExpectedMimeMappings();
+		Collection<MimeMappings.Mapping> expectedMimeMappings = MimeMappings.DEFAULT.getAll();
 		configuredMimeMappings.forEach(
 				(key, value) -> assertThat(expectedMimeMappings).contains(new MimeMappings.Mapping(key, value)));
 		for (MimeMappings.Mapping mapping : expectedMimeMappings) {
@@ -975,8 +974,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 			HttpMethod method) throws Exception {
 		String testContent = setUpFactoryForCompression(contentSize, mimeTypes, excludedUserAgents);
 		TestGzipInputStreamFactory inputStreamFactory = new TestGzipInputStreamFactory();
-		Map<String, InputStreamFactory> contentDecoderMap = Collections.singletonMap("gzip",
-				(InputStreamFactory) inputStreamFactory);
+		Map<String, InputStreamFactory> contentDecoderMap = Collections.singletonMap("gzip", inputStreamFactory);
 		String response = getResponse(getLocalUrl("/test.txt"), method,
 				new HttpComponentsClientHttpRequestFactory(HttpClientBuilder.create().setUserAgent("testUserAgent")
 						.setContentDecoderRegistry(contentDecoderMap).build()));
@@ -1015,10 +1013,6 @@ public abstract class AbstractServletWebServerFactoryTests {
 	}
 
 	protected abstract Map<String, String> getActualMimeMappings();
-
-	protected Collection<MimeMappings.Mapping> getExpectedMimeMappings() {
-		return MimeMappings.DEFAULT.getAll();
-	}
 
 	protected abstract Charset getCharset(Locale locale);
 
@@ -1083,13 +1077,11 @@ public abstract class AbstractServletWebServerFactoryTests {
 			HttpComponentsClientHttpRequestFactory requestFactory, String... headers)
 			throws IOException, URISyntaxException {
 		ClientHttpRequest request = requestFactory.createRequest(new URI(url), method);
-		request.getHeaders().add("Cookie", "JSESSIONID=" + "123");
 		for (String header : headers) {
 			String[] parts = header.split(":");
 			request.getHeaders().add(parts[0], parts[1]);
 		}
-		ClientHttpResponse response = request.execute();
-		return response;
+		return request.execute();
 	}
 
 	protected void assertForwardHeaderIsUsed(ServletWebServerFactory factory) throws IOException, URISyntaxException {

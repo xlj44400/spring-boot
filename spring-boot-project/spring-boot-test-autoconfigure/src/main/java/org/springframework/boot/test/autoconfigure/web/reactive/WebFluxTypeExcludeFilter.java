@@ -31,13 +31,15 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.reactive.config.WebFluxConfigurer;
 import org.springframework.web.server.WebExceptionHandler;
+import org.springframework.web.server.WebFilter;
 
 /**
  * {@link TypeExcludeFilter} for {@link WebFluxTest @WebFluxTest}.
  *
  * @author Stephane Nicoll
+ * @since 2.2.1
  */
-class WebFluxTypeExcludeFilter extends StandardAnnotationCustomizableTypeExcludeFilter<WebFluxTest> {
+public final class WebFluxTypeExcludeFilter extends StandardAnnotationCustomizableTypeExcludeFilter<WebFluxTest> {
 
 	private static final Class<?>[] NO_CONTROLLERS = {};
 
@@ -51,6 +53,7 @@ class WebFluxTypeExcludeFilter extends StandardAnnotationCustomizableTypeExclude
 		includes.add(Converter.class);
 		includes.add(GenericConverter.class);
 		includes.add(WebExceptionHandler.class);
+		includes.add(WebFilter.class);
 		DEFAULT_INCLUDES = Collections.unmodifiableSet(includes);
 	}
 

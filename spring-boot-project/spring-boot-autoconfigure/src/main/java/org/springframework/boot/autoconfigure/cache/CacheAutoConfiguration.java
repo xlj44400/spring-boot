@@ -23,6 +23,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.cache.CacheAutoConfiguration.CacheConfigurationImportSelector;
+import org.springframework.boot.autoconfigure.cache.CacheAutoConfiguration.CacheManagerEntityManagerFactoryDependsOnPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -62,7 +63,7 @@ import org.springframework.util.Assert;
 @EnableConfigurationProperties(CacheProperties.class)
 @AutoConfigureAfter({ CouchbaseAutoConfiguration.class, HazelcastAutoConfiguration.class,
 		HibernateJpaAutoConfiguration.class, RedisAutoConfiguration.class })
-@Import(CacheConfigurationImportSelector.class)
+@Import({ CacheConfigurationImportSelector.class, CacheManagerEntityManagerFactoryDependsOnPostProcessor.class })
 public class CacheAutoConfiguration {
 
 	@Bean
@@ -77,12 +78,12 @@ public class CacheAutoConfiguration {
 		return new CacheManagerValidator(cacheProperties, cacheManager);
 	}
 
-	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass(LocalContainerEntityManagerFactoryBean.class)
 	@ConditionalOnBean(AbstractEntityManagerFactoryBean.class)
-	protected static class CacheManagerJpaDependencyConfiguration extends EntityManagerFactoryDependsOnPostProcessor {
+	static class CacheManagerEntityManagerFactoryDependsOnPostProcessor
+			extends EntityManagerFactoryDependsOnPostProcessor {
 
-		public CacheManagerJpaDependencyConfiguration() {
+		CacheManagerEntityManagerFactoryDependsOnPostProcessor() {
 			super("cacheManager");
 		}
 
@@ -106,8 +107,8 @@ public class CacheAutoConfiguration {
 		@Override
 		public void afterPropertiesSet() {
 			Assert.notNull(this.cacheManager.getIfAvailable(),
-					() -> "No cache manager could " + "be auto-configured, check your configuration (caching "
-							+ "type is '" + this.cacheProperties.getType() + "')");
+					() -> "No cache manager could be auto-configured, check your configuration (caching " + "type is '"
+							+ this.cacheProperties.getType() + "')");
 		}
 
 	}

@@ -19,14 +19,18 @@ package org.springframework.boot.autoconfigure.web.embedded;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import org.eclipse.jetty.server.AbstractConnector;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConfiguration.ConnectionFactory;
 import org.eclipse.jetty.server.RequestLog;
 import org.eclipse.jetty.server.RequestLogWriter;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +53,7 @@ import static org.mockito.Mockito.verify;
  *
  * @author Brian Clozel
  * @author Phillip Webb
+ * @author HaiTao Zhang
  */
 class JettyWebServerFactoryCustomizerTests {
 
@@ -91,7 +96,7 @@ class JettyWebServerFactoryCustomizerTests {
 		JettyWebServer server = customizeAndGetServer();
 		CustomRequestLog requestLog = getRequestLog(server);
 		assertThat(requestLog.getFormatString()).isEqualTo(CustomRequestLog.EXTENDED_NCSA_FORMAT);
-		assertThat(requestLog.getIgnorePaths().length).isEqualTo(2);
+		assertThat(requestLog.getIgnorePaths()).hasSize(2);
 		assertThat(requestLog.getIgnorePaths()).containsExactly("/a/path", "/b/path");
 		RequestLogWriter logWriter = getLogWriter(requestLog);
 		assertThat(logWriter.getFileName()).isEqualTo(logFile.getAbsolutePath());
@@ -110,6 +115,30 @@ class JettyWebServerFactoryCustomizerTests {
 		RequestLogWriter logWriter = getLogWriter(requestLog);
 		assertThat(logWriter.getFileName()).isNull();
 		assertThat(logWriter.isAppend()).isFalse();
+	}
+
+	@Test
+	void maxThreadsCanBeCustomized() {
+		bind("server.jetty.max-threads=100");
+		JettyWebServer server = customizeAndGetServer();
+		QueuedThreadPool threadPool = (QueuedThreadPool) server.getServer().getThreadPool();
+		assertThat(threadPool.getMaxThreads()).isEqualTo(100);
+	}
+
+	@Test
+	void minThreadsCanBeCustomized() {
+		bind("server.jetty.min-threads=100");
+		JettyWebServer server = customizeAndGetServer();
+		QueuedThreadPool threadPool = (QueuedThreadPool) server.getServer().getThreadPool();
+		assertThat(threadPool.getMinThreads()).isEqualTo(100);
+	}
+
+	@Test
+	void threadIdleTimeoutCanBeCustomized() {
+		bind("server.jetty.thread-idle-timeout=100s");
+		JettyWebServer server = customizeAndGetServer();
+		QueuedThreadPool threadPool = (QueuedThreadPool) server.getServer().getThreadPool();
+		assertThat(threadPool.getIdleTimeout()).isEqualTo(100000);
 	}
 
 	private CustomRequestLog getRequestLog(JettyWebServer server) {
@@ -154,6 +183,23 @@ class JettyWebServerFactoryCustomizerTests {
 		JettyWebServer server = customizeAndGetServer();
 		List<Integer> requestHeaderSizes = getRequestHeaderSizes(server);
 		assertThat(requestHeaderSizes).containsOnly(8192);
+	}
+
+	@Test
+	void customIdleTimeout() {
+		bind("server.jetty.connection-idle-timeout=60s");
+		JettyWebServer server = customizeAndGetServer();
+		List<Long> timeouts = connectorsIdleTimeouts(server);
+		assertThat(timeouts).containsOnly(60000L);
+	}
+
+	private List<Long> connectorsIdleTimeouts(JettyWebServer server) {
+		// Start (and directly stop) server to have connectors available
+		server.start();
+		server.stop();
+		return Arrays.stream(server.getServer().getConnectors())
+				.filter((connector) -> connector instanceof AbstractConnector).map(Connector::getIdleTimeout)
+				.collect(Collectors.toList());
 	}
 
 	private List<Integer> getRequestHeaderSizes(JettyWebServer server) {

@@ -29,10 +29,11 @@ import org.elasticsearch.client.RestHighLevelClient;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.boot.testsupport.testcontainers.DisabledWithoutDockerTestcontainers;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -45,25 +46,58 @@ import static org.mockito.Mockito.mock;
  *
  * @author Brian Clozel
  */
-@DisabledWithoutDockerTestcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class RestClientAutoConfigurationTests {
 
 	@Container
-	static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer();
+	static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer().withStartupAttempts(5)
+			.withStartupTimeout(Duration.ofMinutes(2));
 
 	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(RestClientAutoConfiguration.class));
 
 	@Test
 	void configureShouldCreateBothRestClientVariants() {
-		this.contextRunner.run((context) -> assertThat(context).hasSingleBean(RestClient.class)
-				.hasSingleBean(RestHighLevelClient.class));
+		this.contextRunner.run((context) -> {
+			assertThat(context).hasSingleBean(RestClient.class).hasSingleBean(RestHighLevelClient.class);
+			assertThat(context.getBean(RestClient.class))
+					.isSameAs(context.getBean(RestHighLevelClient.class).getLowLevelClient());
+		});
 	}
 
 	@Test
 	void configureWhenCustomClientShouldBackOff() {
 		this.contextRunner.withUserConfiguration(CustomRestClientConfiguration.class)
-				.run((context) -> assertThat(context).hasSingleBean(RestClient.class).hasBean("customRestClient"));
+				.run((context) -> assertThat(context).getBeanNames(RestClient.class).containsOnly("customRestClient"));
+	}
+
+	@Test
+	void configureWhenCustomRestHighLevelClientShouldBackOff() {
+		this.contextRunner.withUserConfiguration(CustomRestHighLevelClientConfiguration.class).run((context) -> {
+			assertThat(context).hasSingleBean(RestClient.class).hasSingleBean(RestHighLevelClient.class);
+			assertThat(context.getBean(RestClient.class))
+					.isSameAs(context.getBean(RestHighLevelClient.class).getLowLevelClient());
+		});
+	}
+
+	@Test
+	void configureWhenDefaultRestClientShouldCreateWhenNoUniqueRestHighLevelClient() {
+		this.contextRunner.withUserConfiguration(TwoCustomRestHighLevelClientConfiguration.class).run((context) -> {
+			assertThat(context).hasSingleBean(RestClient.class);
+			RestClient restClient = context.getBean(RestClient.class);
+			Map<String, RestHighLevelClient> restHighLevelClients = context.getBeansOfType(RestHighLevelClient.class);
+			assertThat(restHighLevelClients).hasSize(2);
+			for (RestHighLevelClient restHighLevelClient : restHighLevelClients.values()) {
+				assertThat(restHighLevelClient.getLowLevelClient()).isNotSameAs(restClient);
+			}
+		});
+	}
+
+	@Test
+	void configureWhenHighLevelClientIsNotAvailableShouldCreateRestClientOnly() {
+		this.contextRunner.withClassLoader(new FilteredClassLoader(RestHighLevelClient.class))
+				.run((context) -> assertThat(context).hasSingleBean(RestClient.class)
+						.doesNotHaveBean(RestHighLevelClient.class));
 	}
 
 	@Test
@@ -134,6 +168,31 @@ class RestClientAutoConfigurationTests {
 		@Bean
 		RestClientBuilderCustomizer myCustomizer() {
 			return (builder) -> builder.setPathPrefix("/test");
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class CustomRestHighLevelClientConfiguration {
+
+		@Bean
+		RestHighLevelClient customRestHighLevelClient(RestClientBuilder builder) {
+			return new RestHighLevelClient(builder);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class TwoCustomRestHighLevelClientConfiguration {
+
+		@Bean
+		RestHighLevelClient customRestHighLevelClient(RestClientBuilder builder) {
+			return new RestHighLevelClient(builder);
+		}
+
+		@Bean
+		RestHighLevelClient customRestHighLevelClient1(RestClientBuilder builder) {
+			return new RestHighLevelClient(builder);
 		}
 
 	}

@@ -26,7 +26,6 @@ import javax.xml.transform.sax.SAXTransformerFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -48,7 +47,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Tests for {@link WebServiceTemplateBuilder}.
@@ -199,8 +198,8 @@ class WebServiceTemplateBuilderTests {
 
 	@Test
 	void additionalInterceptorsShouldAddToExistingWebServiceTemplate() {
-		ClientInterceptor f1 = Mockito.mock(ClientInterceptor.class);
-		ClientInterceptor f2 = Mockito.mock(ClientInterceptor.class);
+		ClientInterceptor f1 = mock(ClientInterceptor.class);
+		ClientInterceptor f2 = mock(ClientInterceptor.class);
 		WebServiceTemplate webServiceTemplate = new WebServiceTemplate();
 		webServiceTemplate.setInterceptors(new ClientInterceptor[] { f1 });
 		this.builder.additionalInterceptors(f2).configure(webServiceTemplate);
@@ -242,7 +241,7 @@ class WebServiceTemplateBuilderTests {
 		WebServiceTemplateCustomizer customizer2 = mock(WebServiceTemplateCustomizer.class);
 		WebServiceTemplate template = this.builder.customizers(customizer1)
 				.customizers(Collections.singleton(customizer2)).build();
-		verifyZeroInteractions(customizer1);
+		verifyNoInteractions(customizer1);
 		verify(customizer2).customize(template);
 	}
 

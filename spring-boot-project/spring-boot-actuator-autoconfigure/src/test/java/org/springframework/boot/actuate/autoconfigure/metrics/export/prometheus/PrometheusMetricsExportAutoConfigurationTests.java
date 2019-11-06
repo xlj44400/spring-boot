@@ -124,24 +124,24 @@ class PrometheusMetricsExportAutoConfigurationTests {
 	}
 
 	@Test
-	void withPushGatewayEnabled(CapturedOutput capturedOutput) {
+	void withPushGatewayEnabled(CapturedOutput output) {
 		this.contextRunner.withConfiguration(AutoConfigurations.of(ManagementContextAutoConfiguration.class))
 				.withPropertyValues("management.metrics.export.prometheus.pushgateway.enabled=true")
 				.withUserConfiguration(BaseConfiguration.class).run((context) -> {
-					assertThat(capturedOutput).doesNotContain("Invalid PushGateway base url");
-					hasGatewayURL(context, "http://localhost:9091/metrics/job/");
+					assertThat(output).doesNotContain("Invalid PushGateway base url");
+					hasGatewayURL(context, "http://localhost:9091/metrics/");
 				});
 	}
 
 	@Test
 	@Deprecated
-	void withCustomLegacyPushGatewayURL(CapturedOutput capturedOutput) {
+	void withCustomLegacyPushGatewayURL(CapturedOutput output) {
 		this.contextRunner.withConfiguration(AutoConfigurations.of(ManagementContextAutoConfiguration.class))
 				.withPropertyValues("management.metrics.export.prometheus.pushgateway.enabled=true",
 						"management.metrics.export.prometheus.pushgateway.base-url=localhost:9090")
 				.withUserConfiguration(BaseConfiguration.class).run((context) -> {
-					assertThat(capturedOutput).contains("Invalid PushGateway base url").contains("localhost:9090");
-					hasGatewayURL(context, "http://localhost:9090/metrics/job/");
+					assertThat(output).contains("Invalid PushGateway base url").contains("localhost:9090");
+					hasGatewayURL(context, "http://localhost:9090/metrics/");
 				});
 	}
 
@@ -151,7 +151,7 @@ class PrometheusMetricsExportAutoConfigurationTests {
 				.withPropertyValues("management.metrics.export.prometheus.pushgateway.enabled=true",
 						"management.metrics.export.prometheus.pushgateway.base-url=https://example.com:8080")
 				.withUserConfiguration(BaseConfiguration.class)
-				.run((context) -> hasGatewayURL(context, "https://example.com:8080/metrics/job/"));
+				.run((context) -> hasGatewayURL(context, "https://example.com:8080/metrics/"));
 	}
 
 	private void hasGatewayURL(AssertableApplicationContext context, String url) {

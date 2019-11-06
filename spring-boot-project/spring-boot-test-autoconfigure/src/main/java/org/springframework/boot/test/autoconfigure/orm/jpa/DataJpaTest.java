@@ -41,15 +41,14 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Annotation that can be used in combination with {@code @RunWith(SpringRunner.class)}
- * for a typical JPA test. Can be used when a test focuses <strong>only</strong> on JPA
- * components.
+ * Annotation for a JPA test that focuses <strong>only</strong> on JPA components.
  * <p>
  * Using this annotation will disable full auto-configuration and instead apply only
  * configuration relevant to JPA tests.
  * <p>
- * By default, tests annotated with {@code @DataJpaTest} will use an embedded in-memory
- * database (replacing any explicit or usually auto-configured DataSource). The
+ * By default, tests annotated with {@code @DataJpaTest} are transactional and roll back
+ * at the end of each test. They also use an embedded in-memory database (replacing any
+ * explicit or usually auto-configured DataSource). The
  * {@link AutoConfigureTestDatabase @AutoConfigureTestDatabase} annotation can be used to
  * override these settings.
  * <p>
@@ -57,6 +56,9 @@ import org.springframework.transaction.annotation.Transactional;
  * database, you should consider {@link SpringBootTest @SpringBootTest} combined with
  * {@link AutoConfigureTestDatabase @AutoConfigureTestDatabase} rather than this
  * annotation.
+ * <p>
+ * When using JUnit 4, this annotation should be used in combination with
+ * {@code @RunWith(SpringRunner.class)}.
  *
  * @author Phillip Webb
  * @author Artsiom Yudovin

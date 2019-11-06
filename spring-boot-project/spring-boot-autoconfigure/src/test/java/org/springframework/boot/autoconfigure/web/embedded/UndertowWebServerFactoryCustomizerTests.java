@@ -51,6 +51,7 @@ import static org.mockito.Mockito.verify;
  * @author Phillip Webb
  * @author Artsiom Yudovin
  * @author Rafiullah Hamedy
+ * @author HaiTao Zhang
  */
 class UndertowWebServerFactoryCustomizerTests {
 
@@ -109,8 +110,8 @@ class UndertowWebServerFactoryCustomizerTests {
 
 	@Test
 	void customConnectionTimeout() {
-		bind("server.connectionTimeout=100");
-		assertThat(boundServerOption(UndertowOptions.NO_REQUEST_TIMEOUT)).isEqualTo(100);
+		bind("server.undertow.no-request-timeout=1m");
+		assertThat(boundServerOption(UndertowOptions.NO_REQUEST_TIMEOUT)).isEqualTo(60000);
 	}
 
 	@Test

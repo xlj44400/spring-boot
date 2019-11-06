@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import org.springframework.core.env.PropertySource;
 /**
  * Strategy used to provide a mapping between a {@link PropertySource} and a
  * {@link ConfigurationPropertySource}.
- * <P>
+ * <p>
  * Mappings should be provided for both {@link ConfigurationPropertyName
  * ConfigurationPropertyName} types and {@code String} based names. This allows the
  * {@link SpringConfigurationPropertySource} to first attempt any direct mappings (i.e.

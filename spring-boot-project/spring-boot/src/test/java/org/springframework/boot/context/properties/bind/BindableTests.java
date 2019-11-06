@@ -145,8 +145,8 @@ class BindableTests {
 		Bindable<String> bindable = Bindable.of(String.class).withExistingValue("foo").withAnnotations(annotation);
 		System.out.println(bindable.toString());
 		assertThat(bindable.toString())
-				.contains("type = java.lang.String, " + "value = 'provided', annotations = array<Annotation>["
-						+ "@org.springframework.boot.context.properties.bind." + "BindableTests$TestAnnotation()]");
+				.contains("type = java.lang.String, value = 'provided', annotations = array<Annotation>["
+						+ "@org.springframework.boot.context.properties.bind.BindableTests$TestAnnotation()]");
 	}
 
 	@Test
@@ -158,6 +158,20 @@ class BindableTests {
 		assertThat(bindable1.hashCode()).isEqualTo(bindable2.hashCode());
 		assertThat(bindable1).isEqualTo(bindable1).isEqualTo(bindable2);
 		assertThat(bindable1).isEqualTo(bindable3);
+	}
+
+	@Test // gh-18218
+	void withExistingValueDoesNotForgetAnnotations() {
+		Annotation annotation = AnnotationUtils.synthesizeAnnotation(TestAnnotation.class);
+		Bindable<?> bindable = Bindable.of(String.class).withAnnotations(annotation).withExistingValue("");
+		assertThat(bindable.getAnnotations()).containsExactly(annotation);
+	}
+
+	@Test // gh-18218
+	void withSuppliedValueDoesNotForgetAnnotations() {
+		Annotation annotation = AnnotationUtils.synthesizeAnnotation(TestAnnotation.class);
+		Bindable<?> bindable = Bindable.of(String.class).withAnnotations(annotation).withSuppliedValue(() -> "");
+		assertThat(bindable.getAnnotations()).containsExactly(annotation);
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)

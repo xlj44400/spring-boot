@@ -54,6 +54,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Scope;
 import org.springframework.core.Ordered;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.util.Assert;
@@ -108,6 +109,7 @@ public class JacksonAutoConfiguration {
 
 	}
 
+	@Deprecated
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass({ Jackson2ObjectMapperBuilder.class, DateTime.class, DateTimeSerializer.class,
 			JacksonJodaDateFormat.class })
@@ -117,6 +119,8 @@ public class JacksonAutoConfiguration {
 
 		@Bean
 		SimpleModule jodaDateTimeSerializationModule(JacksonProperties jacksonProperties) {
+			logger.warn("Auto-configuration of Jackson's Joda-Time integration is deprecated in favor of using "
+					+ "java.time (JSR-310).");
 			SimpleModule module = new SimpleModule();
 			JacksonJodaDateFormat jacksonJodaFormat = getJacksonJodaDateFormat(jacksonProperties);
 			if (jacksonJodaFormat != null) {
@@ -139,7 +143,7 @@ public class JacksonAutoConfiguration {
 					if (logger.isWarnEnabled()) {
 						logger.warn("spring.jackson.date-format could not be used to "
 								+ "configure formatting of Joda's DateTime. You may want "
-								+ "to configure spring.jackson.joda-date-time-format as " + "well.");
+								+ "to configure spring.jackson.joda-date-time-format as well.");
 					}
 				}
 			}
@@ -165,6 +169,7 @@ public class JacksonAutoConfiguration {
 	static class JacksonObjectMapperBuilderConfiguration {
 
 		@Bean
+		@Scope("prototype")
 		@ConditionalOnMissingBean
 		Jackson2ObjectMapperBuilder jacksonObjectMapperBuilder(ApplicationContext applicationContext,
 				List<Jackson2ObjectMapperBuilderCustomizer> customizers) {

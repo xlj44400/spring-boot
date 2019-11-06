@@ -10,7 +10,7 @@
 	<name>Spring Boot Build</name>
 	<description>Spring Boot Build</description>
 	<properties>
-		<revision>2.2.0.BUILD-SNAPSHOT</revision>
+		<revision>2.2.1.BUILD-SNAPSHOT</revision>
 		<main.basedir>${basedir}</main.basedir>
 	</properties>
 	<!-- Most elements are in profiles so they are stripped out during maven-flatten -->
@@ -25,7 +25,7 @@
 			</activation>
 			<properties>
 				<spring-javaformat.version>0.0.15</spring-javaformat.version>
-				<nohttp-checkstyle.version>0.0.1.RELEASE</nohttp-checkstyle.version>
+				<nohttp-checkstyle.version>0.0.3.RELEASE</nohttp-checkstyle.version>
 			</properties>
 			<build>
 				<plugins>
@@ -194,6 +194,11 @@
 			</snapshots>
 		</pluginRepository>
 		<pluginRepository>
+			<id>spring-release</id>
+			<name>Spring Release</name>
+			<url>https://repo.spring.io/release</url>
+		</pluginRepository>
+		<pluginRepository>
 			<id>spring-milestone</id>
 			<name>Spring Milestone</name>
 			<url>https://repo.spring.io/milestone</url>
@@ -213,8 +218,8 @@
 	<build>
 		<pluginManagement>
 			<plugins>
-				<!--This plugin's configuration is used to store Eclipse m2e settings
-					only. It has no influence on the Maven build itself. -->
+				<!-- This plugin's configuration is used to store Eclipse m2e settings
+					 only. It has no influence on the Maven build itself. -->
 				<plugin>
 					<groupId>org.eclipse.m2e</groupId>
 					<artifactId>lifecycle-mapping</artifactId>

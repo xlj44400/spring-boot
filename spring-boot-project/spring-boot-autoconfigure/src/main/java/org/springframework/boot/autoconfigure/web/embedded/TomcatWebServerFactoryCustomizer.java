@@ -17,6 +17,8 @@
 package org.springframework.boot.autoconfigure.web.embedded;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.catalina.Lifecycle;
 import org.apache.catalina.valves.AccessLogValve;
@@ -51,6 +53,8 @@ import org.springframework.util.unit.DataSize;
  * @author Artsiom Yudovin
  * @author Chentao Qu
  * @author Andrew McGhie
+ * @author Dirk Deyne
+ * @author Rafiullah Hamedy
  * @since 2.0.0
  */
 public class TomcatWebServerFactoryCustomizer
@@ -88,13 +92,15 @@ public class TomcatWebServerFactoryCustomizer
 				.to((maxHttpHeaderSize) -> customizeMaxHttpHeaderSize(factory, maxHttpHeaderSize));
 		propertyMapper.from(tomcatProperties::getMaxSwallowSize).whenNonNull().asInt(DataSize::toBytes)
 				.to((maxSwallowSize) -> customizeMaxSwallowSize(factory, maxSwallowSize));
-		propertyMapper.from(tomcatProperties::getMaxHttpPostSize).asInt(DataSize::toBytes)
-				.when((maxHttpPostSize) -> maxHttpPostSize != 0)
-				.to((maxHttpPostSize) -> customizeMaxHttpPostSize(factory, maxHttpPostSize));
+		propertyMapper.from(tomcatProperties::getMaxHttpFormPostSize).asInt(DataSize::toBytes)
+				.when((maxHttpFormPostSize) -> maxHttpFormPostSize != 0)
+				.to((maxHttpFormPostSize) -> customizeMaxHttpFormPostSize(factory, maxHttpFormPostSize));
 		propertyMapper.from(tomcatProperties::getAccesslog).when(ServerProperties.Tomcat.Accesslog::isEnabled)
 				.to((enabled) -> customizeAccessLog(factory));
 		propertyMapper.from(tomcatProperties::getUriEncoding).whenNonNull().to(factory::setUriEncoding);
 		propertyMapper.from(properties::getConnectionTimeout).whenNonNull()
+				.to((connectionTimeout) -> customizeConnectionTimeout(factory, connectionTimeout));
+		propertyMapper.from(tomcatProperties::getConnectionTimeout).whenNonNull()
 				.to((connectionTimeout) -> customizeConnectionTimeout(factory, connectionTimeout));
 		propertyMapper.from(tomcatProperties::getMaxConnections).when(this::isPositive)
 				.to((maxConnections) -> customizeMaxConnections(factory, maxConnections));
@@ -102,6 +108,10 @@ public class TomcatWebServerFactoryCustomizer
 				.to((acceptCount) -> customizeAcceptCount(factory, acceptCount));
 		propertyMapper.from(tomcatProperties::getProcessorCache)
 				.to((processorCache) -> customizeProcessorCache(factory, processorCache));
+		propertyMapper.from(tomcatProperties::getRelaxedPathChars).as(this::joinCharacters).whenHasText()
+				.to((relaxedChars) -> customizeRelaxedPathChars(factory, relaxedChars));
+		propertyMapper.from(tomcatProperties::getRelaxedQueryChars).as(this::joinCharacters).whenHasText()
+				.to((relaxedChars) -> customizeRelaxedQueryChars(factory, relaxedChars));
 		customizeStaticResources(factory);
 		customizeErrorReportValve(properties.getError(), factory);
 	}
@@ -149,6 +159,18 @@ public class TomcatWebServerFactoryCustomizer
 		});
 	}
 
+	private void customizeRelaxedPathChars(ConfigurableTomcatWebServerFactory factory, String relaxedChars) {
+		factory.addConnectorCustomizers((connector) -> connector.setAttribute("relaxedPathChars", relaxedChars));
+	}
+
+	private void customizeRelaxedQueryChars(ConfigurableTomcatWebServerFactory factory, String relaxedChars) {
+		factory.addConnectorCustomizers((connector) -> connector.setAttribute("relaxedQueryChars", relaxedChars));
+	}
+
+	private String joinCharacters(List<Character> content) {
+		return content.stream().map(String::valueOf).collect(Collectors.joining());
+	}
+
 	private void customizeRemoteIpValve(ConfigurableTomcatWebServerFactory factory) {
 		Tomcat tomcatProperties = this.serverProperties.getTomcat();
 		String protocolHeader = tomcatProperties.getProtocolHeader();
@@ -164,6 +186,7 @@ public class TomcatWebServerFactoryCustomizer
 			// The internal proxies default to a white list of "safe" internal IP
 			// addresses
 			valve.setInternalProxies(tomcatProperties.getInternalProxies());
+			valve.setHostHeader(tomcatProperties.getHostHeader());
 			valve.setPortHeader(tomcatProperties.getPortHeader());
 			valve.setProtocolHeaderHttpsValue(tomcatProperties.getProtocolHeaderHttpsValue());
 			// ... so it's safe to add this valve by default.
@@ -222,8 +245,8 @@ public class TomcatWebServerFactoryCustomizer
 		});
 	}
 
-	private void customizeMaxHttpPostSize(ConfigurableTomcatWebServerFactory factory, int maxHttpPostSize) {
-		factory.addConnectorCustomizers((connector) -> connector.setMaxPostSize(maxHttpPostSize));
+	private void customizeMaxHttpFormPostSize(ConfigurableTomcatWebServerFactory factory, int maxHttpFormPostSize) {
+		factory.addConnectorCustomizers((connector) -> connector.setMaxPostSize(maxHttpFormPostSize));
 	}
 
 	private void customizeAccessLog(ConfigurableTomcatWebServerFactory factory) {

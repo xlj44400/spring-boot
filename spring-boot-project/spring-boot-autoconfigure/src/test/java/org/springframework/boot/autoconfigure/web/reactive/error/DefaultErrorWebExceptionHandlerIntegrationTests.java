@@ -72,7 +72,7 @@ class DefaultErrorWebExceptionHandlerIntegrationTests {
 			.withUserConfiguration(Application.class);
 
 	@Test
-	void jsonError(CapturedOutput capturedOutput) {
+	void jsonError(CapturedOutput output) {
 		this.contextRunner.run((context) -> {
 			WebTestClient client = getWebClient(context);
 			client.get().uri("/").exchange().expectStatus().isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR).expectBody()
@@ -80,7 +80,7 @@ class DefaultErrorWebExceptionHandlerIntegrationTests {
 					.isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase()).jsonPath("path").isEqualTo(("/"))
 					.jsonPath("message").isEqualTo("Expected!").jsonPath("exception").doesNotExist().jsonPath("trace")
 					.doesNotExist().jsonPath("requestId").isEqualTo(this.logIdFilter.getLogId());
-			assertThat(capturedOutput).contains("500 Server Error for HTTP GET \"/\"")
+			assertThat(output).contains("500 Server Error for HTTP GET \"/\"")
 					.contains("java.lang.IllegalStateException: Expected!");
 		});
 	}
@@ -111,7 +111,7 @@ class DefaultErrorWebExceptionHandlerIntegrationTests {
 	void bindingResultError() {
 		this.contextRunner.run((context) -> {
 			WebTestClient client = getWebClient(context);
-			client.post().uri("/bind").contentType(MediaType.APPLICATION_JSON).syncBody("{}").exchange().expectStatus()
+			client.post().uri("/bind").contentType(MediaType.APPLICATION_JSON).bodyValue("{}").exchange().expectStatus()
 					.isBadRequest().expectBody().jsonPath("status").isEqualTo("400").jsonPath("error")
 					.isEqualTo(HttpStatus.BAD_REQUEST.getReasonPhrase()).jsonPath("path").isEqualTo(("/bind"))
 					.jsonPath("exception").doesNotExist().jsonPath("errors").isArray().jsonPath("message").isNotEmpty()
