@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,9 @@ package org.springframework.boot.gradle.tasks.bundling;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.Stream;
 
 import org.gradle.testkit.runner.InvalidRunnerConfigurationException;
 import org.gradle.testkit.runner.TaskOutcome;
@@ -38,24 +40,30 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  */
 @ExtendWith(GradleCompatibilityExtension.class)
-public abstract class AbstractBootArchiveIntegrationTests {
-
-	GradleBuild gradleBuild;
+abstract class AbstractBootArchiveIntegrationTests {
 
 	private final String taskName;
 
-	protected AbstractBootArchiveIntegrationTests(String taskName) {
+	private final String libPath;
+
+	private final String classesPath;
+
+	GradleBuild gradleBuild;
+
+	protected AbstractBootArchiveIntegrationTests(String taskName, String libPath, String classesPath) {
 		this.taskName = taskName;
+		this.libPath = libPath;
+		this.classesPath = classesPath;
 	}
 
 	@TestTemplate
-	public void basicBuild() throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
+	void basicBuild() throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 	}
 
 	@TestTemplate
-	public void reproducibleArchive()
+	void reproducibleArchive()
 			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException, InterruptedException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
@@ -69,8 +77,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void upToDateWhenBuiltTwice()
-			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
+	void upToDateWhenBuiltTwice() throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
@@ -78,7 +85,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void upToDateWhenBuiltTwiceWithLaunchScriptIncluded()
+	void upToDateWhenBuiltTwiceWithLaunchScriptIncluded()
 			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", this.taskName).task(":" + this.taskName)
 				.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
@@ -87,7 +94,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void notUpToDateWhenLaunchScriptWasNotIncludedAndThenIsIncluded() {
+	void notUpToDateWhenLaunchScriptWasNotIncludedAndThenIsIncluded() {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", this.taskName).task(":" + this.taskName)
@@ -95,7 +102,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void notUpToDateWhenLaunchScriptWasIncludedAndThenIsNotIncluded() {
+	void notUpToDateWhenLaunchScriptWasIncludedAndThenIsNotIncluded() {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", this.taskName).task(":" + this.taskName)
@@ -103,7 +110,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void notUpToDateWhenLaunchScriptPropertyChanges() {
+	void notUpToDateWhenLaunchScriptPropertyChanges() {
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", "-PlaunchScriptProperty=foo", this.taskName)
 				.task(":" + this.taskName).getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", "-PlaunchScriptProperty=bar", this.taskName)
@@ -111,7 +118,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void applicationPluginMainClassNameIsUsed() throws IOException {
+	void applicationPluginMainClassNameIsUsed() throws IOException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		try (JarFile jarFile = new JarFile(new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0])) {
@@ -121,7 +128,7 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void springBootExtensionMainClassNameIsUsed() throws IOException {
+	void springBootExtensionMainClassNameIsUsed() throws IOException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		try (JarFile jarFile = new JarFile(new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0])) {
@@ -131,9 +138,38 @@ public abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	public void duplicatesAreHandledGracefully() throws IOException {
+	void duplicatesAreHandledGracefully() throws IOException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
+	}
+
+	@TestTemplate
+	void developmentOnlyDependenciesAreNotIncludedInTheArchiveByDefault() throws IOException {
+		File srcMainResources = new File(this.gradleBuild.getProjectDir(), "src/main/resources");
+		srcMainResources.mkdirs();
+		new File(srcMainResources, "resource").createNewFile();
+		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
+				.isEqualTo(TaskOutcome.SUCCESS);
+		try (JarFile jarFile = new JarFile(new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0])) {
+			Stream<String> libEntryNames = jarFile.stream().filter((entry) -> !entry.isDirectory())
+					.map(JarEntry::getName).filter((name) -> name.startsWith(this.libPath));
+			assertThat(libEntryNames).containsExactly(this.libPath + "commons-io-2.6.jar");
+			Stream<String> classesEntryNames = jarFile.stream().filter((entry) -> !entry.isDirectory())
+					.map(JarEntry::getName).filter((name) -> name.startsWith(this.classesPath));
+			assertThat(classesEntryNames).containsExactly(this.classesPath + "resource");
+		}
+	}
+
+	@TestTemplate
+	void developmentOnlyDependenciesCanBeIncludedInTheArchive() throws IOException {
+		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
+				.isEqualTo(TaskOutcome.SUCCESS);
+		try (JarFile jarFile = new JarFile(new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0])) {
+			Stream<String> libEntryNames = jarFile.stream().filter((entry) -> !entry.isDirectory())
+					.map(JarEntry::getName).filter((name) -> name.startsWith(this.libPath));
+			assertThat(libEntryNames).containsExactly(this.libPath + "commons-io-2.6.jar",
+					this.libPath + "commons-lang3-3.9.jar");
+		}
 	}
 
 }

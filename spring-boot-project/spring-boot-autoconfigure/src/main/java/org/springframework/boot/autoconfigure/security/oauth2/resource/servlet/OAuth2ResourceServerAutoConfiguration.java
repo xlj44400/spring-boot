@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,7 @@ import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServic
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.BearerTokenAuthenticationToken;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for OAuth2 resource server support.
@@ -39,24 +36,10 @@ import org.springframework.security.oauth2.server.resource.introspection.OpaqueT
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureBefore({ SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class })
 @EnableConfigurationProperties(OAuth2ResourceServerProperties.class)
+@ConditionalOnClass(BearerTokenAuthenticationToken.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-
+@Import({ Oauth2ResourceServerConfiguration.JwtConfiguration.class,
+		Oauth2ResourceServerConfiguration.OpaqueTokenConfiguration.class })
 public class OAuth2ResourceServerAutoConfiguration {
-
-	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnClass({ JwtAuthenticationToken.class, JwtDecoder.class })
-	@Import({ OAuth2ResourceServerJwtConfiguration.JwtDecoderConfiguration.class,
-			OAuth2ResourceServerJwtConfiguration.OAuth2WebSecurityConfigurerAdapter.class })
-	static class JwtConfiguration {
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnClass({ BearerTokenAuthenticationToken.class, OpaqueTokenIntrospector.class })
-	@Import({ OAuth2ResourceServerOpaqueTokenConfiguration.OpaqueTokenIntrospectionClientConfiguration.class,
-			OAuth2ResourceServerOpaqueTokenConfiguration.OAuth2WebSecurityConfigurerAdapter.class })
-	static class OpaqueTokenConfiguration {
-
-	}
 
 }

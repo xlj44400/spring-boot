@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import org.springframework.boot.testsupport.compiler.TestCompiler;
+import org.springframework.util.FileCopyUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,14 +49,14 @@ class AutoConfigureAnnotationProcessorTests {
 	@Test
 	void annotatedClass() throws Exception {
 		Properties properties = compile(TestClassConfiguration.class);
-		assertThat(properties).hasSize(5);
+		assertThat(properties).hasSize(7);
 		assertThat(properties).containsEntry(
 				"org.springframework.boot.autoconfigureprocessor.TestClassConfiguration.ConditionalOnClass",
 				"java.io.InputStream,org.springframework.boot.autoconfigureprocessor."
 						+ "TestClassConfiguration$Nested,org.springframework.foo");
 		assertThat(properties).containsKey("org.springframework.boot.autoconfigureprocessor.TestClassConfiguration");
 		assertThat(properties)
-				.doesNotContainKey("org.springframework.boot.autoconfigureprocessor.TestClassConfiguration$Nested");
+				.containsKey("org.springframework.boot.autoconfigureprocessor.TestClassConfiguration$Nested");
 		assertThat(properties).containsEntry(
 				"org.springframework.boot.autoconfigureprocessor.TestClassConfiguration.ConditionalOnBean",
 				"java.io.OutputStream");
@@ -96,11 +97,24 @@ class AutoConfigureAnnotationProcessorTests {
 				"123");
 	}
 
+	@Test // gh-19370
+	void propertiesAreFullRepeatable() throws Exception {
+		String first = new String(
+				FileCopyUtils.copyToByteArray(process(TestOrderedClassConfiguration.class).getWrittenFile()));
+		String second = new String(
+				FileCopyUtils.copyToByteArray(process(TestOrderedClassConfiguration.class).getWrittenFile()));
+		assertThat(first).isEqualTo(second).doesNotContain("#");
+	}
+
 	private Properties compile(Class<?>... types) throws IOException {
+		return process(types).getWrittenProperties();
+	}
+
+	private TestAutoConfigureAnnotationProcessor process(Class<?>... types) {
 		TestAutoConfigureAnnotationProcessor processor = new TestAutoConfigureAnnotationProcessor(
 				this.compiler.getOutputLocation());
 		this.compiler.getTask(types).call(processor);
-		return processor.getWrittenProperties();
+		return processor;
 	}
 
 }

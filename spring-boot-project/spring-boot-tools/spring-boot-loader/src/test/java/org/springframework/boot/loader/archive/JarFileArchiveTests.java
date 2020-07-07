@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import org.springframework.boot.loader.TestJarCreator;
 import org.springframework.boot.loader.archive.Archive.Entry;
+import org.springframework.boot.loader.jar.JarFile;
 import org.springframework.util.FileCopyUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -147,6 +148,7 @@ class JarFileArchiveTests {
 		File file = new File(this.tempDir, "test.jar");
 		FileCopyUtils.copy(writeZip64Jar(), file);
 		try (JarFileArchive zip64Archive = new JarFileArchive(file)) {
+			@SuppressWarnings("deprecation")
 			Iterator<Entry> entries = zip64Archive.iterator();
 			for (int i = 0; i < 65537; i++) {
 				assertThat(entries.hasNext()).as(i + "nth file is present").isTrue();
@@ -171,13 +173,14 @@ class JarFileArchiveTests {
 			output.write(zip64JarData);
 			output.closeEntry();
 		}
-		try (JarFileArchive jarFileArchive = new JarFileArchive(file);
-				Archive nestedArchive = jarFileArchive
-						.getNestedArchive(getEntriesMap(jarFileArchive).get("nested/zip64.jar"))) {
-			Iterator<Entry> it = nestedArchive.iterator();
-			for (int i = 0; i < 65537; i++) {
-				assertThat(it.hasNext()).as(i + "nth file is present").isTrue();
-				it.next();
+		try (JarFile jarFile = new JarFile(file)) {
+			ZipEntry nestedEntry = jarFile.getEntry("nested/zip64.jar");
+			try (JarFile nestedJarFile = jarFile.getNestedJarFile(nestedEntry)) {
+				Iterator<JarEntry> iterator = nestedJarFile.iterator();
+				for (int i = 0; i < 65537; i++) {
+					assertThat(iterator.hasNext()).as(i + "nth file is present").isTrue();
+					iterator.next();
+				}
 			}
 		}
 	}

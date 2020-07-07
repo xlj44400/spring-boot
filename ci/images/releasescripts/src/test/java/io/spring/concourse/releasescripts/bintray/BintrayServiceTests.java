@@ -16,6 +16,10 @@
 
 package io.spring.concourse.releasescripts.bintray;
 
+import java.time.Duration;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 import io.spring.concourse.releasescripts.ReleaseInfo;
 import io.spring.concourse.releasescripts.sonatype.SonatypeProperties;
 import io.spring.concourse.releasescripts.sonatype.SonatypeService;
@@ -73,10 +77,15 @@ class BintrayServiceTests {
 
 	@Test
 	void isDistributionComplete() throws Exception {
-		setupGetPackageFiles(1, "all-package-files.json");
-		setupGetPackageFiles(0, "published-files.json");
+		setupGetPackageFiles(0, "no-package-files.json");
+		setupGetPackageFiles(0, "some-package-files.json");
 		setupGetPackageFiles(0, "all-package-files.json");
-		assertThat(this.service.isDistributionComplete(getReleaseInfo())).isTrue();
+		Set<String> digests = new LinkedHashSet<>();
+		digests.add("602e20176706d3cc7535f01ffdbe91b270ae5012");
+		digests.add("602e20176706d3cc7535f01ffdbe91b270ae5013");
+		digests.add("602e20176706d3cc7535f01ffdbe91b270ae5014");
+		assertThat(this.service.isDistributionComplete(getReleaseInfo(), digests, Duration.ofMinutes(1), Duration.ZERO))
+				.isTrue();
 		this.server.verify();
 	}
 

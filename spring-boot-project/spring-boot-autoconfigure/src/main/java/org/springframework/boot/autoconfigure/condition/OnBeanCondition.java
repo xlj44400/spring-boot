@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.aop.scope.ScopedProxyUtils;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.HierarchicalBeanFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -166,7 +168,13 @@ class OnBeanCondition extends FilteringSpringBootCondition implements Configurat
 		for (String type : spec.getTypes()) {
 			Collection<String> typeMatches = getBeanNamesForType(classLoader, considerHierarchy, beanFactory, type,
 					parameterizedContainers);
-			typeMatches.removeAll(beansIgnoredByType);
+			Iterator<String> iterator = typeMatches.iterator();
+			while (iterator.hasNext()) {
+				String match = iterator.next();
+				if (beansIgnoredByType.contains(match) || ScopedProxyUtils.isScopedTarget(match)) {
+					iterator.remove();
+				}
+			}
 			if (typeMatches.isEmpty()) {
 				result.recordUnmatchedType(type);
 			}
@@ -387,7 +395,7 @@ class OnBeanCondition extends FilteringSpringBootCondition implements Configurat
 
 		private final ClassLoader classLoader;
 
-		private final Class<?> annotationType;
+		private final Class<? extends Annotation> annotationType;
 
 		private final Set<String> names;
 
@@ -581,11 +589,11 @@ class OnBeanCondition extends FilteringSpringBootCondition implements Configurat
 		}
 
 		ConditionMessage.Builder message() {
-			return ConditionMessage.forCondition(ConditionalOnBean.class, this);
+			return ConditionMessage.forCondition(this.annotationType, this);
 		}
 
 		ConditionMessage.Builder message(ConditionMessage message) {
-			return message.andCondition(ConditionalOnBean.class, this);
+			return message.andCondition(this.annotationType, this);
 		}
 
 		@Override
@@ -733,7 +741,7 @@ class OnBeanCondition extends FilteringSpringBootCondition implements Configurat
 	}
 
 	/**
-	 * Exteption thrown when the bean type cannot be deduced.
+	 * Exception thrown when the bean type cannot be deduced.
 	 */
 	static final class BeanTypeDeductionException extends RuntimeException {
 

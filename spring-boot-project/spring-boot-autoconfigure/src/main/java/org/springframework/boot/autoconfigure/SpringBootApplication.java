@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,9 +23,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.springframework.beans.factory.support.BeanNameGenerator;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.context.TypeExcludeFilter;
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.context.annotation.AnnotationBeanNameGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScan.Filter;
@@ -37,10 +39,9 @@ import org.springframework.data.repository.Repository;
 /**
  * Indicates a {@link Configuration configuration} class that declares one or more
  * {@link Bean @Bean} methods and also triggers {@link EnableAutoConfiguration
- * auto-configuration}, {@link ComponentScan component scanning}, and
- * {@link ConfigurationPropertiesScan configuration properties scanning}. This is a
- * convenience annotation that is equivalent to declaring {@code @Configuration},
- * {@code @EnableAutoConfiguration}, {@code @ComponentScan}.
+ * auto-configuration} and {@link ComponentScan component scanning}. This is a convenience
+ * annotation that is equivalent to declaring {@code @Configuration},
+ * {@code @EnableAutoConfiguration} and {@code @ComponentScan}.
  *
  * @author Phillip Webb
  * @author Stephane Nicoll
@@ -105,6 +106,22 @@ public @interface SpringBootApplication {
 	 */
 	@AliasFor(annotation = ComponentScan.class, attribute = "basePackageClasses")
 	Class<?>[] scanBasePackageClasses() default {};
+
+	/**
+	 * The {@link BeanNameGenerator} class to be used for naming detected components
+	 * within the Spring container.
+	 * <p>
+	 * The default value of the {@link BeanNameGenerator} interface itself indicates that
+	 * the scanner used to process this {@code @SpringBootApplication} annotation should
+	 * use its inherited bean name generator, e.g. the default
+	 * {@link AnnotationBeanNameGenerator} or any custom instance supplied to the
+	 * application context at bootstrap time.
+	 * @return {@link BeanNameGenerator} to use
+	 * @see SpringApplication#setBeanNameGenerator(BeanNameGenerator)
+	 * @since 2.3.0
+	 */
+	@AliasFor(annotation = ComponentScan.class, attribute = "nameGenerator")
+	Class<? extends BeanNameGenerator> nameGenerator() default BeanNameGenerator.class;
 
 	/**
 	 * Specify whether {@link Bean @Bean} methods should get proxied in order to enforce

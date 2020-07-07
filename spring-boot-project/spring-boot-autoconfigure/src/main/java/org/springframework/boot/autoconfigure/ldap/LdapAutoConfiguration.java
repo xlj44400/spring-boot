@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,11 @@ package org.springframework.boot.autoconfigure.ldap;
 
 import java.util.Collections;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.ldap.LdapProperties.Template;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.context.annotation.Bean;
@@ -29,6 +31,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.ldap.core.ContextSource;
 import org.springframework.ldap.core.LdapOperations;
 import org.springframework.ldap.core.LdapTemplate;
+import org.springframework.ldap.core.support.DirContextAuthenticationStrategy;
 import org.springframework.ldap.core.support.LdapContextSource;
 
 /**
@@ -45,8 +48,10 @@ public class LdapAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public LdapContextSource ldapContextSource(LdapProperties properties, Environment environment) {
+	public LdapContextSource ldapContextSource(LdapProperties properties, Environment environment,
+			ObjectProvider<DirContextAuthenticationStrategy> dirContextAuthenticationStrategy) {
 		LdapContextSource source = new LdapContextSource();
+		dirContextAuthenticationStrategy.ifUnique(source::setAuthenticationStrategy);
 		PropertyMapper propertyMapper = PropertyMapper.get().alwaysApplyingWhenNonNull();
 		propertyMapper.from(properties.getUsername()).to(source::setUserDn);
 		propertyMapper.from(properties.getPassword()).to(source::setPassword);
@@ -60,8 +65,16 @@ public class LdapAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(LdapOperations.class)
-	public LdapTemplate ldapTemplate(ContextSource contextSource) {
-		return new LdapTemplate(contextSource);
+	public LdapTemplate ldapTemplate(LdapProperties properties, ContextSource contextSource) {
+		Template template = properties.getTemplate();
+		PropertyMapper propertyMapper = PropertyMapper.get().alwaysApplyingWhenNonNull();
+		LdapTemplate ldapTemplate = new LdapTemplate(contextSource);
+		propertyMapper.from(template.isIgnorePartialResultException())
+				.to(ldapTemplate::setIgnorePartialResultException);
+		propertyMapper.from(template.isIgnoreNameNotFoundException()).to(ldapTemplate::setIgnoreNameNotFoundException);
+		propertyMapper.from(template.isIgnoreSizeLimitExceededException())
+				.to(ldapTemplate::setIgnoreSizeLimitExceededException);
+		return ldapTemplate;
 	}
 
 }

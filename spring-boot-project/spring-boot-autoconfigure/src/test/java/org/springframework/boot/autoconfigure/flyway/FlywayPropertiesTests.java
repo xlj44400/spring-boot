@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,9 @@ class FlywayPropertiesTests {
 				.isEqualTo(configuration.getLocations());
 		assertThat(properties.getEncoding()).isEqualTo(configuration.getEncoding());
 		assertThat(properties.getConnectRetries()).isEqualTo(configuration.getConnectRetries());
+		assertThat(properties.getDefaultSchema()).isEqualTo(configuration.getDefaultSchema());
 		assertThat(properties.getSchemas()).isEqualTo(Arrays.asList(configuration.getSchemas()));
+		assertThat(properties.isCreateSchemas()).isEqualTo(configuration.getCreateSchemas());
 		assertThat(properties.getTable()).isEqualTo(configuration.getTable());
 		assertThat(properties.getBaselineDescription()).isEqualTo(configuration.getBaselineDescription());
 		assertThat(MigrationVersion.fromVersion(properties.getBaselineVersion()))
@@ -83,6 +85,7 @@ class FlywayPropertiesTests {
 		assertThat(configuration.isOutOfOrder()).isEqualTo(properties.isOutOfOrder());
 		assertThat(configuration.isSkipDefaultCallbacks()).isEqualTo(properties.isSkipDefaultCallbacks());
 		assertThat(configuration.isSkipDefaultResolvers()).isEqualTo(properties.isSkipDefaultResolvers());
+		assertThat(configuration.isValidateMigrationNaming()).isEqualTo(properties.isValidateMigrationNaming());
 		assertThat(configuration.isValidateOnMigrate()).isEqualTo(properties.isValidateOnMigrate());
 	}
 
@@ -96,7 +99,8 @@ class FlywayPropertiesTests {
 		ignoreProperties(properties, "url", "user", "password", "enabled", "checkLocation", "createDataSource");
 
 		// High level object we can't set with properties
-		ignoreProperties(configuration, "callbacks", "classLoader", "dataSource", "javaMigrations", "resolvers");
+		ignoreProperties(configuration, "callbacks", "classLoader", "dataSource", "javaMigrations",
+				"javaMigrationClassProvider", "resourceProvider", "resolvers");
 		// Properties we don't want to expose
 		ignoreProperties(configuration, "resolversAsClassNames", "callbacksAsClassNames");
 		// Handled by the conversion service
@@ -107,6 +111,8 @@ class FlywayPropertiesTests {
 		ignoreProperties(properties, "initSqls");
 		// Handled as dryRunOutput
 		ignoreProperties(configuration, "dryRunOutputAsFile", "dryRunOutputAsFileName");
+		// Handled as createSchemas
+		ignoreProperties(configuration, "shouldCreateSchemas");
 		List<String> configurationKeys = new ArrayList<>(configuration.keySet());
 		Collections.sort(configurationKeys);
 		List<String> propertiesKeys = new ArrayList<>(properties.keySet());

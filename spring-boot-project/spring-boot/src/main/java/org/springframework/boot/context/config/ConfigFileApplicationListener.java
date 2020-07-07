@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@
 
 package org.springframework.boot.context.config;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,9 +30,12 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.logging.Log;
 
@@ -60,8 +65,10 @@ import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.env.Profiles;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.DefaultResourceLoader;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -75,6 +82,7 @@ import org.springframework.util.StringUtils;
  * 'application.properties' and/or 'application.yml' files in the following locations:
  * <ul>
  * <li>file:./config/</li>
+ * <li>file:./config/{@literal *}/</li>
  * <li>file:./</li>
  * <li>classpath:config/</li>
  * <li>classpath:</li>
@@ -107,7 +115,7 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 	private static final String DEFAULT_PROPERTIES = "defaultProperties";
 
 	// Note the order is from least to most specific (last one wins)
-	private static final String DEFAULT_SEARCH_LOCATIONS = "classpath:/,classpath:/config/,file:./,file:./config/";
+	private static final String DEFAULT_SEARCH_LOCATIONS = "classpath:/,classpath:/config/,file:./,file:./config/*/,file:./config/";
 
 	private static final String DEFAULT_NAMES = "application";
 
@@ -157,6 +165,10 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 	public static final int DEFAULT_ORDER = Ordered.HIGHEST_PRECEDENCE + 10;
 
 	private final DeferredLog logger = new DeferredLog();
+
+	private static final Resource[] EMPTY_RESOURCES = {};
+
+	private static final Comparator<File> FILE_COMPARATOR = Comparator.comparing(File::getAbsolutePath);
 
 	private String searchLocations;
 
@@ -314,7 +326,7 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 		Loader(ConfigurableEnvironment environment, ResourceLoader resourceLoader) {
 			this.environment = environment;
 			this.placeholdersResolver = new PropertySourcesPlaceholdersResolver(this.environment);
-			this.resourceLoader = (resourceLoader != null) ? resourceLoader : new DefaultResourceLoader();
+			this.resourceLoader = (resourceLoader != null) ? resourceLoader : new DefaultResourceLoader(null);
 			this.propertySourceLoaders = SpringFactoriesLoader.loadFactories(PropertySourceLoader.class,
 					getClass().getClassLoader());
 		}
@@ -351,8 +363,9 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 			// The default profile for these purposes is represented as null. We add it
 			// first so that it is processed first and has lowest priority.
 			this.profiles.add(null);
-			Set<Profile> activatedViaProperty = getProfilesFromProperty(ACTIVE_PROFILES_PROPERTY);
-			Set<Profile> includedViaProperty = getProfilesFromProperty(INCLUDE_PROFILES_PROPERTY);
+			Binder binder = Binder.get(this.environment);
+			Set<Profile> activatedViaProperty = getProfiles(binder, ACTIVE_PROFILES_PROPERTY);
+			Set<Profile> includedViaProperty = getProfiles(binder, INCLUDE_PROFILES_PROPERTY);
 			List<Profile> otherActiveProfiles = getOtherActiveProfiles(activatedViaProperty, includedViaProperty);
 			this.profiles.addAll(otherActiveProfiles);
 			// Any pre-existing active profiles set via property sources (e.g.
@@ -365,15 +378,6 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 					this.profiles.add(defaultProfile);
 				}
 			}
-		}
-
-		private Set<Profile> getProfilesFromProperty(String profilesProperty) {
-			if (!this.environment.containsProperty(profilesProperty)) {
-				return Collections.emptySet();
-			}
-			Binder binder = Binder.get(this.environment);
-			Set<Profile> profiles = getProfiles(binder, profilesProperty);
-			return new LinkedHashSet<>(profiles);
 		}
 
 		private List<Profile> getOtherActiveProfiles(Set<Profile> activatedViaProperty,
@@ -438,8 +442,8 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 
 		private void load(Profile profile, DocumentFilterFactory filterFactory, DocumentConsumer consumer) {
 			getSearchLocations().forEach((location) -> {
-				boolean isFolder = location.endsWith("/");
-				Set<String> names = isFolder ? getSearchNames() : NO_SEARCH_NAMES;
+				boolean isDirectory = location.endsWith("/");
+				Set<String> names = isDirectory ? getSearchNames() : NO_SEARCH_NAMES;
 				names.forEach((name) -> load(location, name, profile, filterFactory, consumer));
 			});
 		}
@@ -496,54 +500,95 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 
 		private void load(PropertySourceLoader loader, String location, Profile profile, DocumentFilter filter,
 				DocumentConsumer consumer) {
+			Resource[] resources = getResources(location);
+			for (Resource resource : resources) {
+				try {
+					if (resource == null || !resource.exists()) {
+						if (this.logger.isTraceEnabled()) {
+							StringBuilder description = getDescription("Skipped missing config ", location, resource,
+									profile);
+							this.logger.trace(description);
+						}
+						continue;
+					}
+					if (!StringUtils.hasText(StringUtils.getFilenameExtension(resource.getFilename()))) {
+						if (this.logger.isTraceEnabled()) {
+							StringBuilder description = getDescription("Skipped empty config extension ", location,
+									resource, profile);
+							this.logger.trace(description);
+						}
+						continue;
+					}
+					String name = "applicationConfig: [" + getLocationName(location, resource) + "]";
+					List<Document> documents = loadDocuments(loader, name, resource);
+					if (CollectionUtils.isEmpty(documents)) {
+						if (this.logger.isTraceEnabled()) {
+							StringBuilder description = getDescription("Skipped unloaded config ", location, resource,
+									profile);
+							this.logger.trace(description);
+						}
+						continue;
+					}
+					List<Document> loaded = new ArrayList<>();
+					for (Document document : documents) {
+						if (filter.match(document)) {
+							addActiveProfiles(document.getActiveProfiles());
+							addIncludedProfiles(document.getIncludeProfiles());
+							loaded.add(document);
+						}
+					}
+					Collections.reverse(loaded);
+					if (!loaded.isEmpty()) {
+						loaded.forEach((document) -> consumer.accept(profile, document));
+						if (this.logger.isDebugEnabled()) {
+							StringBuilder description = getDescription("Loaded config file ", location, resource,
+									profile);
+							this.logger.debug(description);
+						}
+					}
+				}
+				catch (Exception ex) {
+					StringBuilder description = getDescription("Failed to load property source from ", location,
+							resource, profile);
+					throw new IllegalStateException(description.toString(), ex);
+				}
+			}
+		}
+
+		private String getLocationName(String location, Resource resource) {
+			if (!location.contains("*")) {
+				return location;
+			}
+			if (resource instanceof FileSystemResource) {
+				return ((FileSystemResource) resource).getPath();
+			}
+			return resource.getDescription();
+		}
+
+		private Resource[] getResources(String location) {
 			try {
-				Resource resource = this.resourceLoader.getResource(location);
-				if (resource == null || !resource.exists()) {
-					if (this.logger.isTraceEnabled()) {
-						StringBuilder description = getDescription("Skipped missing config ", location, resource,
-								profile);
-						this.logger.trace(description);
-					}
-					return;
+				if (location.contains("*")) {
+					return getResourcesFromPatternLocation(location);
 				}
-				if (!StringUtils.hasText(StringUtils.getFilenameExtension(resource.getFilename()))) {
-					if (this.logger.isTraceEnabled()) {
-						StringBuilder description = getDescription("Skipped empty config extension ", location,
-								resource, profile);
-						this.logger.trace(description);
-					}
-					return;
-				}
-				String name = "applicationConfig: [" + location + "]";
-				List<Document> documents = loadDocuments(loader, name, resource);
-				if (CollectionUtils.isEmpty(documents)) {
-					if (this.logger.isTraceEnabled()) {
-						StringBuilder description = getDescription("Skipped unloaded config ", location, resource,
-								profile);
-						this.logger.trace(description);
-					}
-					return;
-				}
-				List<Document> loaded = new ArrayList<>();
-				for (Document document : documents) {
-					if (filter.match(document)) {
-						addActiveProfiles(document.getActiveProfiles());
-						addIncludedProfiles(document.getIncludeProfiles());
-						loaded.add(document);
-					}
-				}
-				Collections.reverse(loaded);
-				if (!loaded.isEmpty()) {
-					loaded.forEach((document) -> consumer.accept(profile, document));
-					if (this.logger.isDebugEnabled()) {
-						StringBuilder description = getDescription("Loaded config file ", location, resource, profile);
-						this.logger.debug(description);
-					}
-				}
+				return new Resource[] { this.resourceLoader.getResource(location) };
 			}
 			catch (Exception ex) {
-				throw new IllegalStateException("Failed to load property source from location '" + location + "'", ex);
+				return EMPTY_RESOURCES;
 			}
+		}
+
+		private Resource[] getResourcesFromPatternLocation(String location) throws IOException {
+			String directoryPath = location.substring(0, location.indexOf("*/"));
+			Resource resource = this.resourceLoader.getResource(directoryPath);
+			File[] files = resource.getFile().listFiles(File::isDirectory);
+			if (files != null) {
+				String fileName = location.substring(location.lastIndexOf("/") + 1);
+				Arrays.sort(files, FILE_COMPARATOR);
+				return Arrays.stream(files).map((file) -> file.listFiles((dir, name) -> name.equals(fileName)))
+						.filter(Objects::nonNull).flatMap((Function<File[], Stream<File>>) Arrays::stream)
+						.map(FileSystemResource::new).toArray(Resource[]::new);
+			}
+			return EMPTY_RESOURCES;
 		}
 
 		private void addIncludedProfiles(Set<Profile> includeProfiles) {
@@ -573,8 +618,10 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 			return loaded.stream().map((propertySource) -> {
 				Binder binder = new Binder(ConfigurationPropertySources.from(propertySource),
 						this.placeholdersResolver);
-				return new Document(propertySource, binder.bind("spring.profiles", STRING_ARRAY).orElse(null),
-						getProfiles(binder, ACTIVE_PROFILES_PROPERTY), getProfiles(binder, INCLUDE_PROFILES_PROPERTY));
+				String[] profiles = binder.bind("spring.profiles", STRING_ARRAY).orElse(null);
+				Set<Profile> activeProfiles = getProfiles(binder, ACTIVE_PROFILES_PROPERTY);
+				Set<Profile> includeProfiles = getProfiles(binder, INCLUDE_PROFILES_PROPERTY);
+				return new Document(propertySource, profiles, activeProfiles, includeProfiles);
 			}).collect(Collectors.toList());
 		}
 
@@ -622,12 +669,14 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 		}
 
 		private Set<String> getSearchLocations() {
-			if (this.environment.containsProperty(CONFIG_LOCATION_PROPERTY)) {
-				return getSearchLocations(CONFIG_LOCATION_PROPERTY);
-			}
 			Set<String> locations = getSearchLocations(CONFIG_ADDITIONAL_LOCATION_PROPERTY);
-			locations.addAll(
-					asResolvedSet(ConfigFileApplicationListener.this.searchLocations, DEFAULT_SEARCH_LOCATIONS));
+			if (this.environment.containsProperty(CONFIG_LOCATION_PROPERTY)) {
+				locations.addAll(getSearchLocations(CONFIG_LOCATION_PROPERTY));
+			}
+			else {
+				locations.addAll(
+						asResolvedSet(ConfigFileApplicationListener.this.searchLocations, DEFAULT_SEARCH_LOCATIONS));
+			}
 			return locations;
 		}
 
@@ -637,6 +686,9 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 				for (String path : asResolvedSet(this.environment.getProperty(propertyName), null)) {
 					if (!path.contains("$")) {
 						path = StringUtils.cleanPath(path);
+						Assert.state(!path.startsWith(ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX),
+								"Classpath wildcard patterns cannot be used as a search location");
+						validateWildcardLocation(path);
 						if (!ResourceUtils.isUrl(path)) {
 							path = ResourceUtils.FILE_URL_PREFIX + path;
 						}
@@ -647,10 +699,21 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 			return locations;
 		}
 
+		private void validateWildcardLocation(String path) {
+			if (path.contains("*")) {
+				Assert.state(StringUtils.countOccurrencesOf(path, "*") == 1,
+						() -> "Search location '" + path + "' cannot contain multiple wildcards");
+				String directoryPath = path.substring(0, path.lastIndexOf("/") + 1);
+				Assert.state(directoryPath.endsWith("*/"), () -> "Search location '" + path + "' must end with '*/'");
+			}
+		}
+
 		private Set<String> getSearchNames() {
 			if (this.environment.containsProperty(CONFIG_NAME_PROPERTY)) {
 				String property = this.environment.getProperty(CONFIG_NAME_PROPERTY);
-				return asResolvedSet(property, null);
+				Set<String> names = asResolvedSet(property, null);
+				names.forEach(this::assertValidConfigName);
+				return names;
 			}
 			return asResolvedSet(ConfigFileApplicationListener.this.names, DEFAULT_NAMES);
 		}
@@ -660,6 +723,10 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 					(value != null) ? this.environment.resolvePlaceholders(value) : fallback)));
 			Collections.reverse(list);
 			return new LinkedHashSet<>(list);
+		}
+
+		private void assertValidConfigName(String name) {
+			Assert.state(!name.contains("*"), () -> "Config name '" + name + "' cannot contain wildcards");
 		}
 
 		private void addLoadedPropertySources() {

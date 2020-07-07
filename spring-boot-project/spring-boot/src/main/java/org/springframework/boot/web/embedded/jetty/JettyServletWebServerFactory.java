@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.ErrorHandler;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
+import org.eclipse.jetty.server.handler.StatisticsHandler;
 import org.eclipse.jetty.server.session.DefaultSessionCache;
 import org.eclipse.jetty.server.session.FileSessionDataStore;
 import org.eclipse.jetty.server.session.SessionHandler;
@@ -57,6 +58,7 @@ import org.eclipse.jetty.webapp.WebAppContext;
 
 import org.springframework.boot.web.server.ErrorPage;
 import org.springframework.boot.web.server.MimeMappings;
+import org.springframework.boot.web.server.Shutdown;
 import org.springframework.boot.web.server.WebServer;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
@@ -151,6 +153,11 @@ public class JettyServletWebServerFactory extends AbstractServletWebServerFactor
 		}
 		if (this.useForwardHeaders) {
 			new ForwardHeadersCustomizer().customize(server);
+		}
+		if (getShutdown() == Shutdown.GRACEFUL) {
+			StatisticsHandler statisticsHandler = new StatisticsHandler();
+			statisticsHandler.setHandler(server.getHandler());
+			server.setHandler(statisticsHandler);
 		}
 		return getJettyWebServer(server);
 	}
@@ -260,7 +267,7 @@ public class JettyServletWebServerFactory extends AbstractServletWebServerFactor
 			Resource rootResource = (docBase.isDirectory() ? Resource.newResource(docBase.getCanonicalFile())
 					: JarResource.newJarResource(Resource.newResource(docBase)));
 			resources.add((root != null) ? new LoaderHidingResource(rootResource) : rootResource);
-			for (URL resourceJarUrl : this.getUrlsOfJarsWithMetaInfResources()) {
+			for (URL resourceJarUrl : getUrlsOfJarsWithMetaInfResources()) {
 				Resource resource = createResource(resourceJarUrl);
 				if (resource.exists() && resource.isDirectory()) {
 					resources.add(resource);
@@ -327,9 +334,9 @@ public class JettyServletWebServerFactory extends AbstractServletWebServerFactor
 			ServletContextInitializer... initializers) {
 		List<Configuration> configurations = new ArrayList<>();
 		configurations.add(getServletContextInitializerConfiguration(webAppContext, initializers));
-		configurations.addAll(getConfigurations());
 		configurations.add(getErrorPageConfiguration());
 		configurations.add(getMimeTypeConfiguration());
+		configurations.addAll(getConfigurations());
 		return configurations.toArray(new Configuration[0]);
 	}
 
@@ -342,8 +349,8 @@ public class JettyServletWebServerFactory extends AbstractServletWebServerFactor
 
 			@Override
 			public void configure(WebAppContext context) throws Exception {
-				ErrorHandler errorHandler = context.getErrorHandler();
-				context.setErrorHandler(new JettyEmbeddedErrorHandler(errorHandler));
+				JettyEmbeddedErrorHandler errorHandler = new JettyEmbeddedErrorHandler();
+				context.setErrorHandler(errorHandler);
 				addJettyErrorPages(errorHandler, getErrorPages());
 			}
 
@@ -484,11 +491,7 @@ public class JettyServletWebServerFactory extends AbstractServletWebServerFactor
 		return this.threadPool;
 	}
 
-	/**
-	 * Set a Jetty {@link ThreadPool} that should be used by the {@link Server}. If set to
-	 * {@code null} (default), the {@link Server} creates a {@link ThreadPool} implicitly.
-	 * @param threadPool a Jetty ThreadPool to be used
-	 */
+	@Override
 	public void setThreadPool(ThreadPool threadPool) {
 		this.threadPool = threadPool;
 	}
@@ -521,7 +524,7 @@ public class JettyServletWebServerFactory extends AbstractServletWebServerFactor
 		}
 
 		@Override
-		public Resource addPath(String path) throws IOException, MalformedURLException {
+		public Resource addPath(String path) throws IOException {
 			if (path.startsWith("/org/springframework/boot")) {
 				return null;
 			}

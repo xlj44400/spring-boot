@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.ServerSocket;
@@ -44,12 +45,22 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
+import javax.servlet.AsyncContext;
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
 import javax.servlet.FilterConfig;
@@ -58,6 +69,7 @@ import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 import javax.servlet.ServletException;
+import javax.servlet.ServletRegistration.Dynamic;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.SessionCookieConfig;
@@ -66,18 +78,25 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import org.apache.catalina.webresources.TomcatURLStreamHandlerFactory;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.InputStreamFactory;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
+import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.ssl.SSLContextBuilder;
 import org.apache.http.ssl.TrustStrategy;
 import org.apache.jasper.EmbeddedServletOptions;
 import org.apache.jasper.servlet.JspServlet;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -93,7 +112,10 @@ import org.springframework.boot.testsupport.web.servlet.ExampleFilter;
 import org.springframework.boot.testsupport.web.servlet.ExampleServlet;
 import org.springframework.boot.web.server.Compression;
 import org.springframework.boot.web.server.ErrorPage;
+import org.springframework.boot.web.server.GracefulShutdownResult;
 import org.springframework.boot.web.server.MimeMappings;
+import org.springframework.boot.web.server.PortInUseException;
+import org.springframework.boot.web.server.Shutdown;
 import org.springframework.boot.web.server.Ssl;
 import org.springframework.boot.web.server.Ssl.ClientAuth;
 import org.springframework.boot.web.server.SslStoreProvider;
@@ -111,6 +133,7 @@ import org.springframework.http.client.ClientHttpRequest;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.util.ClassUtils;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.util.SocketUtils;
 import org.springframework.util.StreamUtils;
@@ -120,6 +143,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIOException;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -146,6 +170,25 @@ public abstract class AbstractServletWebServerFactoryTests {
 
 	private final HttpClientContext httpClientContext = HttpClientContext.create();
 
+	private final Supplier<HttpClientBuilder> httpClientBuilder = () -> HttpClients.custom()
+			.setRetryHandler(new StandardHttpRequestRetryHandler(10, false) {
+
+				@Override
+				public boolean retryRequest(IOException exception, int executionCount, HttpContext context) {
+					boolean retry = super.retryRequest(exception, executionCount, context);
+					if (retry) {
+						try {
+							Thread.sleep(200);
+						}
+						catch (InterruptedException ex) {
+							Thread.currentThread().interrupt();
+						}
+					}
+					return retry;
+				}
+
+			});
+
 	@AfterEach
 	void tearDown() {
 		if (this.webServer != null) {
@@ -155,6 +198,20 @@ public abstract class AbstractServletWebServerFactoryTests {
 			catch (Exception ex) {
 				// Ignore
 			}
+		}
+		if (ClassUtils.isPresent("org.apache.catalina.webresources.TomcatURLStreamHandlerFactory",
+				getClass().getClassLoader())) {
+			ReflectionTestUtils.setField(TomcatURLStreamHandlerFactory.class, "instance", null);
+		}
+		ReflectionTestUtils.setField(URL.class, "factory", null);
+	}
+
+	@AfterEach
+	void clearUrlStreamHandlerFactory() {
+		if (ClassUtils.isPresent("org.apache.catalina.webresources.TomcatURLStreamHandlerFactory",
+				getClass().getClassLoader())) {
+			ReflectionTestUtils.setField(TomcatURLStreamHandlerFactory.class, "instance", null);
+			ReflectionTestUtils.setField(URL.class, "factory", null);
 		}
 	}
 
@@ -246,10 +303,13 @@ public abstract class AbstractServletWebServerFactoryTests {
 	@Test
 	void specificPort() throws Exception {
 		AbstractServletWebServerFactory factory = getFactory();
-		int specificPort = SocketUtils.findAvailableTcpPort(41000);
-		factory.setPort(specificPort);
-		this.webServer = factory.getWebServer(exampleServletRegistration());
-		this.webServer.start();
+		int specificPort = doWithRetry(() -> {
+			int port = SocketUtils.findAvailableTcpPort(41000);
+			factory.setPort(port);
+			this.webServer = factory.getWebServer(exampleServletRegistration());
+			this.webServer.start();
+			return port;
+		});
 		assertThat(getResponse("http://localhost:" + specificPort + "/hello")).isEqualTo("Hello World");
 		assertThat(this.webServer.getPort()).isEqualTo(specificPort);
 	}
@@ -407,6 +467,21 @@ public abstract class AbstractServletWebServerFactoryTests {
 	}
 
 	@Test
+	void sslWithInvalidAliasFailsDuringStartup() {
+		AbstractServletWebServerFactory factory = getFactory();
+		Ssl ssl = getSsl(null, "password", "test-alias-404", "src/test/resources/test.jks");
+		factory.setSsl(ssl);
+		ServletRegistrationBean<ExampleServlet> registration = new ServletRegistrationBean<>(
+				new ExampleServlet(true, false), "/hello");
+		ThrowingCallable call = () -> factory.getWebServer(registration).start();
+		assertThatSslWithInvalidAliasCallFails(call);
+	}
+
+	protected void assertThatSslWithInvalidAliasCallFails(ThrowingCallable call) {
+		assertThatThrownBy(call).hasStackTraceContaining("Keystore does not contain specified alias 'test-alias-404'");
+	}
+
+	@Test
 	void serverHeaderIsDisabledByDefaultWhenUsingSsl() throws Exception {
 		AbstractServletWebServerFactory factory = getFactory();
 		factory.setSsl(getSsl(null, "password", "src/test/resources/test.jks"));
@@ -414,7 +489,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		ClientHttpResponse response = getClientResponse(getLocalUrl("https", "/hello"), HttpMethod.GET,
 				new HttpComponentsClientHttpRequestFactory(httpClient));
 		assertThat(response.getHeaders().get("Server")).isNullOrEmpty();
@@ -429,7 +504,8 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory)
+				.setRetryHandler(new DefaultHttpRequestRetryHandler(10, false)).build();
 		ClientHttpResponse response = getClientResponse(getLocalUrl("https", "/hello"), HttpMethod.GET,
 				new HttpComponentsClientHttpRequestFactory(httpClient));
 		assertThat(response.getHeaders().get("Server")).containsExactly("MyServer");
@@ -443,7 +519,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
 	}
@@ -460,7 +536,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
 						.loadKeyMaterial(keyStore, "secret".toCharArray()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
 	}
@@ -477,7 +553,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
 						.loadKeyMaterial(keyStore, "password".toCharArray()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
 	}
@@ -491,7 +567,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		String localUrl = getLocalUrl("https", "/test.txt");
 		assertThatIOException().isThrownBy(() -> getResponse(localUrl, requestFactory));
@@ -510,7 +586,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
 						.loadKeyMaterial(keyStore, "password".toCharArray()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
 	}
@@ -524,7 +600,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
 	}
@@ -548,7 +624,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
 						.loadKeyMaterial(keyStore, "password".toCharArray()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/test.txt"), requestFactory)).isEqualTo("test");
 		verify(sslStoreProvider, atLeastOnce()).getKeyStore();
@@ -577,7 +653,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		return getSsl(clientAuth, keyPassword, keyStore, null, null, null);
 	}
 
-	private Ssl getSsl(ClientAuth clientAuth, String keyPassword, String keyAlias, String keyStore) {
+	protected Ssl getSsl(ClientAuth clientAuth, String keyPassword, String keyAlias, String keyStore) {
 		return getSsl(clientAuth, keyPassword, keyAlias, keyStore, null, null, null);
 	}
 
@@ -622,7 +698,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		this.webServer.start();
 		SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
 				new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build());
-		HttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+		HttpClient httpClient = this.httpClientBuilder.get().setSSLSocketFactory(socketFactory).build();
 		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 		assertThat(getResponse(getLocalUrl("https", "/hello"), requestFactory)).contains("scheme=https");
 	}
@@ -633,7 +709,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 
 	@Test
 	void defaultSessionTimeout() {
-		assertThat(getFactory().getSession().getTimeout()).isEqualTo(Duration.ofMinutes(30));
+		assertThat(getFactory().getSession().getTimeout()).hasMinutes(30);
 	}
 
 	@Test
@@ -769,7 +845,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 		TestGzipInputStreamFactory inputStreamFactory = new TestGzipInputStreamFactory();
 		Map<String, InputStreamFactory> contentDecoderMap = Collections.singletonMap("gzip", inputStreamFactory);
 		getResponse(getLocalUrl("/hello"), new HttpComponentsClientHttpRequestFactory(
-				HttpClientBuilder.create().setContentDecoderRegistry(contentDecoderMap).build()));
+				this.httpClientBuilder.get().setContentDecoderRegistry(contentDecoderMap).build()));
 		assertThat(inputStreamFactory.wasCompressionUsed()).isTrue();
 	}
 
@@ -823,7 +899,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 	}
 
 	@Test
-	protected void portClashOfPrimaryConnectorResultsInPortInUseException() throws IOException {
+	protected void portClashOfPrimaryConnectorResultsInPortInUseException() throws Exception {
 		doWithBlockedPort((port) -> {
 			assertThatExceptionOfType(RuntimeException.class).isThrownBy(() -> {
 				AbstractServletWebServerFactory factory = getFactory();
@@ -835,7 +911,7 @@ public abstract class AbstractServletWebServerFactoryTests {
 	}
 
 	@Test
-	void portClashOfSecondaryConnectorResultsInPortInUseException() throws IOException {
+	void portClashOfSecondaryConnectorResultsInPortInUseException() throws Exception {
 		doWithBlockedPort((port) -> {
 			assertThatExceptionOfType(RuntimeException.class).isThrownBy(() -> {
 				AbstractServletWebServerFactory factory = getFactory();
@@ -844,6 +920,16 @@ public abstract class AbstractServletWebServerFactoryTests {
 				AbstractServletWebServerFactoryTests.this.webServer.start();
 			}).satisfies((ex) -> handleExceptionCausedByBlockedPortOnSecondaryConnector(ex, port));
 		});
+	}
+
+	@Test
+	void malformedAddress() throws Exception {
+		AbstractServletWebServerFactory factory = getFactory();
+		factory.setAddress(InetAddress.getByName("255.255.255.255"));
+		assertThatExceptionOfType(RuntimeException.class).isThrownBy(() -> {
+			this.webServer = factory.getWebServer();
+			this.webServer.start();
+		}).isNotInstanceOf(PortInUseException.class);
 	}
 
 	@Test
@@ -945,6 +1031,101 @@ public abstract class AbstractServletWebServerFactoryTests {
 				.getWebServer((context) -> context.addServlet("failing", FailingServlet.class).setLoadOnStartup(0));
 		assertThatExceptionOfType(WebServerException.class).isThrownBy(this.webServer::start)
 				.satisfies(this::wrapsFailingServletException);
+	}
+
+	@Test
+	void whenThereAreNoInFlightRequestsShutDownGracefullyInvokesCallbackWithIdle() throws Exception {
+		AbstractServletWebServerFactory factory = getFactory();
+		factory.setShutdown(Shutdown.GRACEFUL);
+		this.webServer = factory.getWebServer();
+		this.webServer.start();
+		AtomicReference<GracefulShutdownResult> result = new AtomicReference<>();
+		this.webServer.shutDownGracefully(result::set);
+		Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> GracefulShutdownResult.IDLE == result.get());
+	}
+
+	@Test
+	void whenARequestRemainsInFlightThenShutDownGracefullyDoesNotInvokeCallbackUntilTheRequestCompletes()
+			throws Exception {
+		AbstractServletWebServerFactory factory = getFactory();
+		factory.setShutdown(Shutdown.GRACEFUL);
+		BlockingServlet blockingServlet = new BlockingServlet();
+		this.webServer = factory.getWebServer((context) -> {
+			Dynamic registration = context.addServlet("blockingServlet", blockingServlet);
+			registration.addMapping("/blocking");
+		});
+		this.webServer.start();
+		int port = this.webServer.getPort();
+		Future<Object> request = initiateGetRequest(port, "/blocking");
+		blockingServlet.awaitQueue();
+		AtomicReference<GracefulShutdownResult> result = new AtomicReference<>();
+		this.webServer.shutDownGracefully(result::set);
+		blockingServlet.admitOne();
+		assertThat(request.get()).isInstanceOf(HttpResponse.class);
+		Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> GracefulShutdownResult.IDLE == result.get());
+	}
+
+	@Test
+	void whenAnAsyncRequestRemainsInFlightThenShutDownGracefullyDoesNotInvokeCallbackUntilRequestCompletes()
+			throws Exception {
+		AbstractServletWebServerFactory factory = getFactory();
+		factory.setShutdown(Shutdown.GRACEFUL);
+		BlockingAsyncServlet blockingAsyncServlet = new BlockingAsyncServlet();
+		this.webServer = factory.getWebServer((context) -> {
+			Dynamic registration = context.addServlet("blockingServlet", blockingAsyncServlet);
+			registration.addMapping("/blockingAsync");
+			registration.setAsyncSupported(true);
+		});
+		this.webServer.start();
+		int port = this.webServer.getPort();
+		Future<Object> request = initiateGetRequest(port, "/blockingAsync");
+		blockingAsyncServlet.awaitQueue();
+		AtomicReference<GracefulShutdownResult> result = new AtomicReference<>();
+		this.webServer.shutDownGracefully(result::set);
+		Thread.sleep(5000);
+		assertThat(result.get()).isNull();
+		assertThat(request.isDone()).isFalse();
+		blockingAsyncServlet.admitOne();
+		assertThat(request.get()).isInstanceOf(HttpResponse.class);
+		Awaitility.await().atMost(Duration.ofSeconds(5)).until(() -> GracefulShutdownResult.IDLE == result.get());
+	}
+
+	@Test
+	void whenARequestIsActiveThenStopWillComplete() throws InterruptedException, BrokenBarrierException {
+		AbstractServletWebServerFactory factory = getFactory();
+		BlockingServlet blockingServlet = new BlockingServlet();
+		this.webServer = factory
+				.getWebServer((context) -> context.addServlet("blockingServlet", blockingServlet).addMapping("/"));
+		this.webServer.start();
+		int port = this.webServer.getPort();
+		initiateGetRequest(port, "/");
+		blockingServlet.awaitQueue();
+		this.webServer.stop();
+		try {
+			blockingServlet.admitOne();
+		}
+		catch (RuntimeException ex) {
+
+		}
+	}
+
+	protected Future<Object> initiateGetRequest(int port, String path) {
+		return initiateGetRequest(HttpClients.createMinimal(), port, path);
+	}
+
+	protected Future<Object> initiateGetRequest(HttpClient httpClient, int port, String path) {
+		RunnableFuture<Object> getRequest = new FutureTask<>(() -> {
+			try {
+				HttpResponse response = httpClient.execute(new HttpGet("http://localhost:" + port + path));
+				response.getEntity().getContent().close();
+				return response;
+			}
+			catch (Exception ex) {
+				return ex;
+			}
+		});
+		new Thread(getRequest, "GET " + path).start();
+		return getRequest;
 	}
 
 	private void wrapsFailingServletException(WebServerException ex) {
@@ -1063,14 +1244,15 @@ public abstract class AbstractServletWebServerFactoryTests {
 
 	protected ClientHttpResponse getClientResponse(String url, HttpMethod method, String... headers)
 			throws IOException, URISyntaxException {
-		return getClientResponse(url, method, new HttpComponentsClientHttpRequestFactory() {
+		return getClientResponse(url, method,
+				new HttpComponentsClientHttpRequestFactory(this.httpClientBuilder.get().build()) {
 
-			@Override
-			protected HttpContext createHttpContext(HttpMethod httpMethod, URI uri) {
-				return AbstractServletWebServerFactoryTests.this.httpClientContext;
-			}
+					@Override
+					protected HttpContext createHttpContext(HttpMethod httpMethod, URI uri) {
+						return AbstractServletWebServerFactoryTests.this.httpClientContext;
+					}
 
-		}, headers);
+				}, headers);
 	}
 
 	protected ClientHttpResponse getClientResponse(String url, HttpMethod method,
@@ -1131,19 +1313,28 @@ public abstract class AbstractServletWebServerFactoryTests {
 		return bean;
 	}
 
-	protected final void doWithBlockedPort(BlockedPortAction action) throws IOException {
-		int port = SocketUtils.findAvailableTcpPort(40000);
-		ServerSocket serverSocket = new ServerSocket();
+	private <T> T doWithRetry(Callable<T> action) throws Exception {
+		Exception lastFailure = null;
 		for (int i = 0; i < 10; i++) {
 			try {
-				serverSocket.bind(new InetSocketAddress(port));
-				break;
+				return action.call();
 			}
 			catch (Exception ex) {
+				lastFailure = ex;
 			}
 		}
+		throw new IllegalStateException("Action was not successful in 10 attempts", lastFailure);
+	}
+
+	protected final void doWithBlockedPort(BlockedPortAction action) throws Exception {
+		ServerSocket serverSocket = new ServerSocket();
+		int blockedPort = doWithRetry(() -> {
+			int port = SocketUtils.findAvailableTcpPort(40000);
+			serverSocket.bind(new InetSocketAddress(port));
+			return port;
+		});
 		try {
-			action.run(port);
+			action.run(blockedPort);
 		}
 		finally {
 			serverSocket.close();
@@ -1246,6 +1437,101 @@ public abstract class AbstractServletWebServerFactoryTests {
 
 		FailingServletException() {
 			super("Init Failure");
+		}
+
+	}
+
+	protected static class BlockingServlet extends HttpServlet {
+
+		private final BlockingQueue<CyclicBarrier> barriers = new ArrayBlockingQueue<>(10);
+
+		public BlockingServlet() {
+
+		}
+
+		@Override
+		protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+			CyclicBarrier barrier = new CyclicBarrier(2);
+			this.barriers.add(barrier);
+			try {
+				barrier.await();
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			}
+			catch (BrokenBarrierException ex) {
+				throw new ServletException(ex);
+			}
+		}
+
+		public void admitOne() {
+			try {
+				CyclicBarrier barrier = this.barriers.take();
+				if (!barrier.isBroken()) {
+					barrier.await();
+				}
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			}
+			catch (BrokenBarrierException ex) {
+				throw new RuntimeException(ex);
+			}
+		}
+
+		public void awaitQueue() throws InterruptedException {
+			while (this.barriers.isEmpty()) {
+				Thread.sleep(100);
+			}
+		}
+
+		public void awaitQueue(int size) throws InterruptedException {
+			while (this.barriers.size() < size) {
+				Thread.sleep(100);
+			}
+		}
+
+	}
+
+	static class BlockingAsyncServlet extends HttpServlet {
+
+		private final BlockingQueue<CyclicBarrier> barriers = new ArrayBlockingQueue<>(10);
+
+		@Override
+		protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+			CyclicBarrier barrier = new CyclicBarrier(2);
+			this.barriers.add(barrier);
+			AsyncContext async = req.startAsync();
+			new Thread(() -> {
+				try {
+					barrier.await();
+				}
+				catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+				}
+				catch (BrokenBarrierException ex) {
+
+				}
+				async.complete();
+			}).start();
+		}
+
+		private void admitOne() {
+			try {
+				this.barriers.take().await();
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			}
+			catch (BrokenBarrierException ex) {
+				throw new RuntimeException(ex);
+			}
+		}
+
+		private void awaitQueue() throws InterruptedException {
+			while (this.barriers.isEmpty()) {
+				Thread.sleep(100);
+			}
 		}
 
 	}

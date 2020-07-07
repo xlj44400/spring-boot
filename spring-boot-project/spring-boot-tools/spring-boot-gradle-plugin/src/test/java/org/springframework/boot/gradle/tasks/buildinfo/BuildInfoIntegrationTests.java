@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,12 +40,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  */
 @ExtendWith(GradleCompatibilityExtension.class)
-public class BuildInfoIntegrationTests {
+class BuildInfoIntegrationTests {
 
 	GradleBuild gradleBuild;
 
 	@TestTemplate
-	public void defaultValues() {
+	void defaultValues() {
 		assertThat(this.gradleBuild.build("buildInfo").task(":buildInfo").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		Properties buildInfoProperties = buildInfoProperties();
 		assertThat(buildInfoProperties).containsKey("build.time");
@@ -56,7 +56,7 @@ public class BuildInfoIntegrationTests {
 	}
 
 	@TestTemplate
-	public void basicExecution() {
+	void basicExecution() {
 		assertThat(this.gradleBuild.build("buildInfo").task(":buildInfo").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		Properties buildInfoProperties = buildInfoProperties();
 		assertThat(buildInfoProperties).containsKey("build.time");
@@ -64,17 +64,17 @@ public class BuildInfoIntegrationTests {
 		assertThat(buildInfoProperties).containsEntry("build.group", "foo");
 		assertThat(buildInfoProperties).containsEntry("build.additional", "foo");
 		assertThat(buildInfoProperties).containsEntry("build.name", "foo");
-		assertThat(buildInfoProperties).containsEntry("build.version", "1.0");
+		assertThat(buildInfoProperties).containsEntry("build.version", "0.1.0");
 	}
 
 	@TestTemplate
-	public void notUpToDateWhenExecutedTwiceAsTimeChanges() {
+	void notUpToDateWhenExecutedTwiceAsTimeChanges() {
 		assertThat(this.gradleBuild.build("buildInfo").task(":buildInfo").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build("buildInfo").task(":buildInfo").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 	}
 
 	@TestTemplate
-	public void upToDateWhenExecutedTwiceWithFixedTime() {
+	void upToDateWhenExecutedTwiceWithFixedTime() {
 		assertThat(this.gradleBuild.build("buildInfo", "-PnullTime").task(":buildInfo").getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build("buildInfo", "-PnullTime").task(":buildInfo").getOutcome())
@@ -82,7 +82,7 @@ public class BuildInfoIntegrationTests {
 	}
 
 	@TestTemplate
-	public void notUpToDateWhenExecutedTwiceWithFixedTimeAndChangedProjectVersion() {
+	void notUpToDateWhenExecutedTwiceWithFixedTimeAndChangedProjectVersion() {
 		assertThat(this.gradleBuild.build("buildInfo", "-PnullTime").task(":buildInfo").getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		BuildResult result = this.gradleBuild.build("buildInfo", "-PnullTime", "-PprojectVersion=0.2.0");
@@ -90,7 +90,7 @@ public class BuildInfoIntegrationTests {
 	}
 
 	@TestTemplate
-	public void reproducibleOutputWithFixedTime()
+	void reproducibleOutputWithFixedTime()
 			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException, InterruptedException {
 		assertThat(this.gradleBuild.build("buildInfo", "-PnullTime").task(":buildInfo").getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);

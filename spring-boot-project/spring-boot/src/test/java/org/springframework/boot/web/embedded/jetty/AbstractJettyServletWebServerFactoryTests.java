@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,15 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.apache.jasper.servlet.JspServlet;
+import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.webapp.WebAppContext;
+import org.junit.jupiter.api.Test;
 
+import org.springframework.boot.testsupport.system.CapturedOutput;
+import org.springframework.boot.web.server.Compression;
 import org.springframework.boot.web.server.PortInUseException;
 import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
 import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactoryTests;
@@ -54,7 +59,7 @@ abstract class AbstractJettyServletWebServerFactoryTests extends AbstractServlet
 
 	@Override
 	protected JspServlet getJspServlet() throws Exception {
-		WebAppContext context = (WebAppContext) ((JettyWebServer) this.webServer).getServer().getHandler();
+		WebAppContext context = findWebAppContext((JettyWebServer) this.webServer);
 		ServletHolder holder = context.getServletHandler().getServlet("jsp");
 		if (holder == null) {
 			return null;
@@ -66,13 +71,13 @@ abstract class AbstractJettyServletWebServerFactoryTests extends AbstractServlet
 
 	@Override
 	protected Map<String, String> getActualMimeMappings() {
-		WebAppContext context = (WebAppContext) ((JettyWebServer) this.webServer).getServer().getHandler();
+		WebAppContext context = findWebAppContext((JettyWebServer) this.webServer);
 		return context.getMimeTypes().getMimeMap();
 	}
 
 	@Override
 	protected Charset getCharset(Locale locale) {
-		WebAppContext context = (WebAppContext) ((JettyWebServer) this.webServer).getServer().getHandler();
+		WebAppContext context = findWebAppContext((JettyWebServer) this.webServer);
 		String charsetName = context.getLocaleEncoding(locale);
 		return (charsetName != null) ? Charset.forName(charsetName) : null;
 	}
@@ -85,7 +90,33 @@ abstract class AbstractJettyServletWebServerFactoryTests extends AbstractServlet
 
 	@Override
 	protected void handleExceptionCausedByBlockedPortOnSecondaryConnector(RuntimeException ex, int blockedPort) {
-		this.handleExceptionCausedByBlockedPortOnPrimaryConnector(ex, blockedPort);
+		handleExceptionCausedByBlockedPortOnPrimaryConnector(ex, blockedPort);
+	}
+
+	@Test
+	void contextPathIsLoggedOnStartupWhenCompressionIsEnabled(CapturedOutput output) {
+		AbstractServletWebServerFactory factory = getFactory();
+		factory.setContextPath("/custom");
+		Compression compression = new Compression();
+		compression.setEnabled(true);
+		factory.setCompression(compression);
+		this.webServer = factory.getWebServer(exampleServletRegistration());
+		this.webServer.start();
+		assertThat(output).containsOnlyOnce("with context path '/custom'");
+	}
+
+	protected WebAppContext findWebAppContext(JettyWebServer webServer) {
+		return findWebAppContext(webServer.getServer().getHandler());
+	}
+
+	private WebAppContext findWebAppContext(Handler handler) {
+		if (handler instanceof WebAppContext) {
+			return (WebAppContext) handler;
+		}
+		if (handler instanceof HandlerWrapper) {
+			return findWebAppContext(((HandlerWrapper) handler).getHandler());
+		}
+		throw new IllegalStateException("No WebAppContext found");
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,23 +19,28 @@ package org.springframework.boot.devtools.env;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Properties;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.devtools.system.DevToolsEnablementDeducer;
 import org.springframework.boot.env.EnvironmentPostProcessor;
+import org.springframework.boot.env.PropertiesPropertySourceLoader;
+import org.springframework.boot.env.PropertySourceLoader;
+import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.support.PropertiesLoaderUtils;
+import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
 
 /**
  * {@link EnvironmentPostProcessor} to add devtools properties from the user's home
- * folder.
+ * directory.
  *
  * @author Phillip Webb
  * @author Andy Wilkinson
@@ -51,6 +56,17 @@ public class DevToolsHomePropertiesPostProcessor implements EnvironmentPostProce
 			"spring-boot-devtools.properties" };
 
 	private static final String CONFIG_PATH = "/.config/spring-boot/";
+
+	private static final Set<PropertySourceLoader> PROPERTY_SOURCE_LOADERS;
+
+	static {
+		Set<PropertySourceLoader> propertySourceLoaders = new HashSet<>();
+		propertySourceLoaders.add(new PropertiesPropertySourceLoader());
+		if (ClassUtils.isPresent("org.yaml.snakeyaml.Yaml", null)) {
+			propertySourceLoaders.add(new YamlPropertySourceLoader());
+		}
+		PROPERTY_SOURCE_LOADERS = Collections.unmodifiableSet(propertySourceLoaders);
+	}
 
 	@Override
 	public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
@@ -77,7 +93,7 @@ public class DevToolsHomePropertiesPostProcessor implements EnvironmentPostProce
 
 	private void addPropertySource(List<PropertySource<?>> propertySources, String fileName,
 			Function<File, String> propertySourceNamer) {
-		File home = getHomeFolder();
+		File home = getHomeDirectory();
 		File file = (home != null) ? new File(home, fileName) : null;
 		FileSystemResource resource = (file != null) ? new FileSystemResource(file) : null;
 		if (resource != null && resource.exists() && resource.isFile()) {
@@ -88,16 +104,24 @@ public class DevToolsHomePropertiesPostProcessor implements EnvironmentPostProce
 	private void addPropertySource(List<PropertySource<?>> propertySources, FileSystemResource resource,
 			Function<File, String> propertySourceNamer) {
 		try {
-			Properties properties = PropertiesLoaderUtils.loadProperties(resource);
 			String name = propertySourceNamer.apply(resource.getFile());
-			propertySources.add(new PropertiesPropertySource(name, properties));
+			for (PropertySourceLoader loader : PROPERTY_SOURCE_LOADERS) {
+				if (canLoadFileExtension(loader, resource.getFilename())) {
+					propertySources.addAll(loader.load(name, resource));
+				}
+			}
 		}
 		catch (IOException ex) {
 			throw new IllegalStateException("Unable to load " + resource.getFilename(), ex);
 		}
 	}
 
-	protected File getHomeFolder() {
+	private boolean canLoadFileExtension(PropertySourceLoader loader, String name) {
+		return Arrays.stream(loader.getFileExtensions())
+				.anyMatch((fileExtension) -> StringUtils.endsWithIgnoreCase(name, fileExtension));
+	}
+
+	protected File getHomeDirectory() {
 		String home = System.getProperty("user.home");
 		if (StringUtils.hasLength(home)) {
 			return new File(home);

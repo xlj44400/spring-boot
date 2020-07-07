@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,12 @@ import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory.CacheMode;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory.ConfirmType;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -40,20 +40,26 @@ import org.springframework.util.StringUtils;
  * @author Josh Thornhill
  * @author Gary Russell
  * @author Artsiom Yudovin
+ * @author Franjo Zilic
  * @since 1.0.0
  */
 @ConfigurationProperties(prefix = "spring.rabbitmq")
 public class RabbitProperties {
 
+	private static final int DEFAULT_PORT = 5672;
+
+	private static final int DEFAULT_PORT_SECURE = 5671;
+
 	/**
-	 * RabbitMQ host.
+	 * RabbitMQ host. Ignored if an address is set.
 	 */
 	private String host = "localhost";
 
 	/**
-	 * RabbitMQ port.
+	 * RabbitMQ port. Ignored if an address is set. Default to 5672, or 5671 if SSL is
+	 * enabled.
 	 */
-	private int port = 5672;
+	private Integer port;
 
 	/**
 	 * Login user to authenticate to the broker.
@@ -76,7 +82,8 @@ public class RabbitProperties {
 	private String virtualHost;
 
 	/**
-	 * Comma-separated list of addresses to which the client should connect.
+	 * Comma-separated list of addresses to which the client should connect. When set, the
+	 * host and port are ignored.
 	 */
 	private String addresses;
 
@@ -86,6 +93,11 @@ public class RabbitProperties {
 	 */
 	@DurationUnit(ChronoUnit.SECONDS)
 	private Duration requestedHeartbeat;
+
+	/**
+	 * Number of channels per connection requested by the client. Use 0 for unlimited.
+	 */
+	private int requestedChannelMax = 2047;
 
 	/**
 	 * Whether to enable publisher returns.
@@ -138,7 +150,7 @@ public class RabbitProperties {
 		this.host = host;
 	}
 
-	public int getPort() {
+	public Integer getPort() {
 		return this.port;
 	}
 
@@ -151,13 +163,16 @@ public class RabbitProperties {
 	 */
 	public int determinePort() {
 		if (CollectionUtils.isEmpty(this.parsedAddresses)) {
-			return getPort();
+			Integer port = getPort();
+			if (port != null) {
+				return port;
+			}
+			return (Optional.ofNullable(getSsl().getEnabled()).orElse(false)) ? DEFAULT_PORT_SECURE : DEFAULT_PORT;
 		}
-		Address address = this.parsedAddresses.get(0);
-		return address.port;
+		return this.parsedAddresses.get(0).port;
 	}
 
-	public void setPort(int port) {
+	public void setPort(Integer port) {
 		this.port = port;
 	}
 
@@ -172,7 +187,7 @@ public class RabbitProperties {
 	 */
 	public String determineAddresses() {
 		if (CollectionUtils.isEmpty(this.parsedAddresses)) {
-			return this.host + ":" + this.port;
+			return this.host + ":" + determinePort();
 		}
 		List<String> addressStrings = new ArrayList<>();
 		for (Address parsedAddress : this.parsedAddresses) {
@@ -189,7 +204,7 @@ public class RabbitProperties {
 	private List<Address> parseAddresses(String addresses) {
 		List<Address> parsedAddresses = new ArrayList<>();
 		for (String address : StringUtils.commaDelimitedListToStringArray(addresses)) {
-			parsedAddresses.add(new Address(address));
+			parsedAddresses.add(new Address(address, Optional.ofNullable(getSsl().getEnabled()).orElse(false)));
 		}
 		return parsedAddresses;
 	}
@@ -275,15 +290,12 @@ public class RabbitProperties {
 		this.requestedHeartbeat = requestedHeartbeat;
 	}
 
-	@DeprecatedConfigurationProperty(reason = "replaced to support additional confirm types",
-			replacement = "spring.rabbitmq.publisher-confirm-type")
-	public boolean isPublisherConfirms() {
-		return ConfirmType.CORRELATED.equals(this.publisherConfirmType);
+	public int getRequestedChannelMax() {
+		return this.requestedChannelMax;
 	}
 
-	@Deprecated
-	public void setPublisherConfirms(boolean publisherConfirms) {
-		this.publisherConfirmType = (publisherConfirms) ? ConfirmType.CORRELATED : ConfirmType.NONE;
+	public void setRequestedChannelMax(int requestedChannelMax) {
+		this.requestedChannelMax = requestedChannelMax;
 	}
 
 	public boolean isPublisherReturns() {
@@ -325,9 +337,10 @@ public class RabbitProperties {
 	public class Ssl {
 
 		/**
-		 * Whether to enable SSL support.
+		 * Whether to enable SSL support. Determined automatically if an address is
+		 * provided with the protocol (amqp:// vs. amqps://).
 		 */
-		private boolean enabled;
+		private Boolean enabled;
 
 		/**
 		 * Path to the key store that holds the SSL certificate.
@@ -374,7 +387,7 @@ public class RabbitProperties {
 		 */
 		private boolean verifyHostname = true;
 
-		public boolean isEnabled() {
+		public Boolean getEnabled() {
 			return this.enabled;
 		}
 
@@ -383,17 +396,18 @@ public class RabbitProperties {
 		 * enabled flag if no addresses have been set.
 		 * @return whether ssl is enabled
 		 * @see #setAddresses(String)
-		 * @see #isEnabled()
+		 * @see #getEnabled() ()
 		 */
 		public boolean determineEnabled() {
+			boolean defaultEnabled = Optional.ofNullable(getEnabled()).orElse(false);
 			if (CollectionUtils.isEmpty(RabbitProperties.this.parsedAddresses)) {
-				return isEnabled();
+				return defaultEnabled;
 			}
 			Address address = RabbitProperties.this.parsedAddresses.get(0);
-			return address.secureConnection;
+			return address.determineSslEnabled(defaultEnabled);
 		}
 
-		public void setEnabled(boolean enabled) {
+		public void setEnabled(Boolean enabled) {
 			this.enabled = enabled;
 		}
 
@@ -718,28 +732,6 @@ public class RabbitProperties {
 			this.maxConcurrency = maxConcurrency;
 		}
 
-		/**
-		 * Return the number of messages processed in one transaction.
-		 * @return the number of messages
-		 * @deprecated since 2.2.0 in favor of {@link SimpleContainer#getBatchSize()}
-		 */
-		@DeprecatedConfigurationProperty(replacement = "spring.rabbitmq.listener.simple.batch-size")
-		@Deprecated
-		public Integer getTransactionSize() {
-			return getBatchSize();
-		}
-
-		/**
-		 * Set the number of messages processed in one transaction.
-		 * @param transactionSize the number of messages
-		 * @deprecated since 2.2.0 in favor of
-		 * {@link SimpleContainer#setBatchSize(Integer)}
-		 */
-		@Deprecated
-		public void setTransactionSize(Integer transactionSize) {
-			setBatchSize(transactionSize);
-		}
-
 		public Integer getBatchSize() {
 			return this.batchSize;
 		}
@@ -973,11 +965,7 @@ public class RabbitProperties {
 
 		private static final String PREFIX_AMQP = "amqp://";
 
-		private static final int DEFAULT_PORT = 5672;
-
 		private static final String PREFIX_AMQP_SECURE = "amqps://";
-
-		private static final int DEFAULT_PORT_SECURE = 5671;
 
 		private String host;
 
@@ -989,14 +977,14 @@ public class RabbitProperties {
 
 		private String virtualHost;
 
-		private boolean secureConnection;
+		private Boolean secureConnection;
 
-		private Address(String input) {
+		private Address(String input, boolean sslEnabled) {
 			input = input.trim();
 			input = trimPrefix(input);
 			input = parseUsernameAndPassword(input);
 			input = parseVirtualHost(input);
-			parseHostAndPort(input);
+			parseHostAndPort(input, sslEnabled);
 		}
 
 		private String trimPrefix(String input) {
@@ -1005,7 +993,8 @@ public class RabbitProperties {
 				return input.substring(PREFIX_AMQP_SECURE.length());
 			}
 			if (input.startsWith(PREFIX_AMQP)) {
-				input = input.substring(PREFIX_AMQP.length());
+				this.secureConnection = false;
+				return input.substring(PREFIX_AMQP.length());
 			}
 			return input;
 		}
@@ -1036,16 +1025,20 @@ public class RabbitProperties {
 			return input;
 		}
 
-		private void parseHostAndPort(String input) {
+		private void parseHostAndPort(String input, boolean sslEnabled) {
 			int portIndex = input.indexOf(':');
 			if (portIndex == -1) {
 				this.host = input;
-				this.port = (this.secureConnection) ? DEFAULT_PORT_SECURE : DEFAULT_PORT;
+				this.port = (determineSslEnabled(sslEnabled)) ? DEFAULT_PORT_SECURE : DEFAULT_PORT;
 			}
 			else {
 				this.host = input.substring(0, portIndex);
-				this.port = Integer.valueOf(input.substring(portIndex + 1));
+				this.port = Integer.parseInt(input.substring(portIndex + 1));
 			}
+		}
+
+		private boolean determineSslEnabled(boolean sslEnabled) {
+			return (this.secureConnection != null) ? this.secureConnection : sslEnabled;
 		}
 
 	}

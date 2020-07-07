@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -310,7 +310,7 @@ public class SpringApplication {
 			Banner printedBanner = printBanner(environment);
 			context = createApplicationContext();
 			exceptionReporters = getSpringFactoriesInstances(SpringBootExceptionReporter.class,
-					new Class[] { ConfigurableApplicationContext.class }, context);
+					new Class<?>[] { ConfigurableApplicationContext.class }, context);
 			prepareContext(context, environment, listeners, applicationArguments, printedBanner);
 			refreshContext(context);
 			afterRefresh(context, applicationArguments);
@@ -394,7 +394,7 @@ public class SpringApplication {
 	}
 
 	private void refreshContext(ConfigurableApplicationContext context) {
-		refresh(context);
+		refresh((ApplicationContext) context);
 		if (this.registerShutdownHook) {
 			try {
 				context.registerShutdownHook();
@@ -550,7 +550,7 @@ public class SpringApplication {
 			return null;
 		}
 		ResourceLoader resourceLoader = (this.resourceLoader != null) ? this.resourceLoader
-				: new DefaultResourceLoader(getClassLoader());
+				: new DefaultResourceLoader(null);
 		SpringApplicationBannerPrinter bannerPrinter = new SpringApplicationBannerPrinter(resourceLoader, this.banner);
 		if (this.bannerMode == Mode.LOG) {
 			return bannerPrinter.print(environment, this.mainApplicationClass, logger);
@@ -741,10 +741,21 @@ public class SpringApplication {
 	/**
 	 * Refresh the underlying {@link ApplicationContext}.
 	 * @param applicationContext the application context to refresh
+	 * @deprecated since 2.3.0 in favor of
+	 * {@link #refresh(ConfigurableApplicationContext)}
 	 */
+	@Deprecated
 	protected void refresh(ApplicationContext applicationContext) {
-		Assert.isInstanceOf(AbstractApplicationContext.class, applicationContext);
-		((AbstractApplicationContext) applicationContext).refresh();
+		Assert.isInstanceOf(ConfigurableApplicationContext.class, applicationContext);
+		refresh((ConfigurableApplicationContext) applicationContext);
+	}
+
+	/**
+	 * Refresh the underlying {@link ApplicationContext}.
+	 * @param applicationContext the application context to refresh
+	 */
+	protected void refresh(ConfigurableApplicationContext applicationContext) {
+		applicationContext.refresh();
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -310,7 +310,6 @@ public class Binder {
 
 	private <T> T bind(ConfigurationPropertyName name, Bindable<T> target, BindHandler handler, Context context,
 			boolean allowRecursiveBinding, boolean create) {
-		context.clearConfigurationProperty();
 		try {
 			Bindable<T> replacementTarget = handler.onStart(name, target, context);
 			if (replacementTarget == null) {
@@ -368,7 +367,7 @@ public class Binder {
 	private <T> Object bindObject(ConfigurationPropertyName name, Bindable<T> target, BindHandler handler,
 			Context context, boolean allowRecursiveBinding) {
 		ConfigurationProperty property = findProperty(name, context);
-		if (property == null && containsNoDescendantOf(context.getSources(), name) && context.depth != 0) {
+		if (property == null && context.depth != 0 && containsNoDescendantOf(context.getSources(), name)) {
 			return null;
 		}
 		AggregateBinder<?> aggregateBinder = getAggregateBinder(target, context);
@@ -522,6 +521,8 @@ public class Binder {
 
 		private final Deque<Class<?>> dataObjectBindings = new ArrayDeque<>();
 
+		private final Deque<Class<?>> constructorBindings = new ArrayDeque<>();
+
 		private ConfigurationProperty configurationProperty;
 
 		Context() {
@@ -574,12 +575,24 @@ public class Binder {
 			}
 		}
 
-		private void setConfigurationProperty(ConfigurationProperty configurationProperty) {
+		void setConfigurationProperty(ConfigurationProperty configurationProperty) {
 			this.configurationProperty = configurationProperty;
 		}
 
 		void clearConfigurationProperty() {
 			this.configurationProperty = null;
+		}
+
+		void pushConstructorBoundTypes(Class<?> value) {
+			this.constructorBindings.push(value);
+		}
+
+		boolean isNestedConstructorBinding() {
+			return !this.constructorBindings.isEmpty();
+		}
+
+		void popConstructorBoundTypes() {
+			this.constructorBindings.pop();
 		}
 
 		PlaceholdersResolver getPlaceholdersResolver() {

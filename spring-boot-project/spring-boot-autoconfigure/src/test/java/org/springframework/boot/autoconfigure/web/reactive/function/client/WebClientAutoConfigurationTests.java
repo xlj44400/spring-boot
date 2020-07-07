@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.springframework.boot.web.codec.CodecCustomizer;
 import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.reactive.ClientHttpConnector;
 import org.springframework.http.client.reactive.ClientHttpResponse;
@@ -87,6 +88,7 @@ class WebClientAutoConfigurationTests {
 	void shouldGetPrototypeScopedBean() {
 		this.contextRunner.withUserConfiguration(WebClientCustomizerConfig.class).run((context) -> {
 			ClientHttpResponse response = mock(ClientHttpResponse.class);
+			given(response.getHeaders()).willReturn(new HttpHeaders());
 			ClientHttpConnector firstConnector = mock(ClientHttpConnector.class);
 			given(firstConnector.connect(any(), any(), any())).willReturn(Mono.just(response));
 			WebClient.Builder firstBuilder = context.getBean(WebClient.Builder.class);
@@ -102,7 +104,7 @@ class WebClientAutoConfigurationTests {
 			verify(secondConnector).connect(eq(HttpMethod.GET), eq(URI.create("https://second.example.org/foo")),
 					any());
 			WebClientCustomizer customizer = context.getBean("webClientCustomizer", WebClientCustomizer.class);
-			verify(customizer, times(1)).customize(any(WebClient.Builder.class));
+			verify(customizer, times(2)).customize(any(WebClient.Builder.class));
 		});
 	}
 

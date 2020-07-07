@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,24 +28,21 @@ import reactor.core.publisher.Mono;
 import org.springframework.boot.actuate.endpoint.SecurityContext;
 import org.springframework.boot.actuate.endpoint.http.ApiVersion;
 import org.springframework.boot.actuate.endpoint.web.WebEndpointResponse;
-import org.springframework.boot.actuate.health.AbstractHealthAggregator;
 import org.springframework.boot.actuate.health.DefaultHealthContributorRegistry;
 import org.springframework.boot.actuate.health.DefaultReactiveHealthContributorRegistry;
 import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthAggregator;
 import org.springframework.boot.actuate.health.HealthComponent;
 import org.springframework.boot.actuate.health.HealthContributorRegistry;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.boot.actuate.health.HealthEndpointGroups;
+import org.springframework.boot.actuate.health.HealthEndpointGroupsPostProcessor;
 import org.springframework.boot.actuate.health.HealthEndpointWebExtension;
 import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.boot.actuate.health.HealthStatusHttpMapper;
 import org.springframework.boot.actuate.health.HttpCodeStatusMapper;
 import org.springframework.boot.actuate.health.NamedContributor;
 import org.springframework.boot.actuate.health.ReactiveHealthContributorRegistry;
 import org.springframework.boot.actuate.health.ReactiveHealthEndpointWebExtension;
 import org.springframework.boot.actuate.health.ReactiveHealthIndicator;
-import org.springframework.boot.actuate.health.ReactiveHealthIndicatorRegistry;
 import org.springframework.boot.actuate.health.Status;
 import org.springframework.boot.actuate.health.StatusAggregator;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -56,6 +53,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -65,6 +63,7 @@ import static org.mockito.Mockito.mock;
  * @author Phillip Webb
  * @author Andy Wilkinson
  * @author Stephane Nicoll
+ * @author Scott Frederick
  */
 @SuppressWarnings("deprecation")
 class HealthEndpointAutoConfigurationTests {
@@ -96,14 +95,6 @@ class HealthEndpointAutoConfigurationTests {
 		this.contextRunner.withUserConfiguration(HealthAggregatorConfiguration.class).run((context) -> {
 			StatusAggregator aggregator = context.getBean(StatusAggregator.class);
 			assertThat(aggregator.getAggregateStatus(Status.UP, Status.DOWN)).isEqualTo(Status.UNKNOWN);
-		});
-	}
-
-	@Test
-	void runWhenHasHealthStatusHttpMapperAdaptsToHttpCodeStatusMapper() {
-		this.contextRunner.withUserConfiguration(HealthStatusHttpMapperConfiguration.class).run((context) -> {
-			HttpCodeStatusMapper mapper = context.getBean(HttpCodeStatusMapper.class);
-			assertThat(mapper.getStatusCode(Status.UP)).isEqualTo(123);
 		});
 	}
 
@@ -289,7 +280,8 @@ class HealthEndpointAutoConfigurationTests {
 	@Test // gh-18354
 	void runCreatesLegacyHealthAggregator() {
 		this.contextRunner.run((context) -> {
-			HealthAggregator aggregator = context.getBean(HealthAggregator.class);
+			org.springframework.boot.actuate.health.HealthAggregator aggregator = context
+					.getBean(org.springframework.boot.actuate.health.HealthAggregator.class);
 			Map<String, Health> healths = new LinkedHashMap<>();
 			healths.put("one", Health.up().build());
 			healths.put("two", Health.down().build());
@@ -298,23 +290,27 @@ class HealthEndpointAutoConfigurationTests {
 		});
 	}
 
-	@Test // gh-18354
-	void runCreatesLegacyHealthStatusHttpMapper() {
-		this.contextRunner.run((context) -> {
-			HealthStatusHttpMapper mapper = context.getBean(HealthStatusHttpMapper.class);
-			assertThat(mapper.mapStatus(Status.DOWN)).isEqualTo(503);
-		});
-	}
-
 	@Test
 	void runWhenReactorAvailableCreatesReactiveHealthIndicatorRegistryBean() {
-		this.contextRunner.run((context) -> assertThat(context).hasSingleBean(ReactiveHealthIndicatorRegistry.class));
+		this.contextRunner.run((context) -> assertThat(context)
+				.hasSingleBean(org.springframework.boot.actuate.health.ReactiveHealthIndicatorRegistry.class));
 	}
 
 	@Test // gh-18570
 	void runWhenReactorUnavailableDoesNotCreateReactiveHealthIndicatorRegistryBean() {
 		this.contextRunner.withClassLoader(new FilteredClassLoader(Mono.class.getPackage().getName()))
-				.run((context) -> assertThat(context).doesNotHaveBean(ReactiveHealthIndicatorRegistry.class));
+				.run((context) -> assertThat(context).doesNotHaveBean(
+						org.springframework.boot.actuate.health.ReactiveHealthIndicatorRegistry.class));
+	}
+
+	@Test
+	void runWhenHasHealthEndpointGroupsPostProcessorPerformsProcessing() {
+		this.contextRunner.withPropertyValues("management.endpoint.health.group.ready.include=*").withUserConfiguration(
+				HealthEndpointGroupsConfiguration.class, TestHealthEndpointGroupsPostProcessor.class).run((context) -> {
+					HealthEndpointGroups groups = context.getBean(HealthEndpointGroups.class);
+					assertThatExceptionOfType(RuntimeException.class).isThrownBy(() -> groups.get("test"))
+							.withMessage("postprocessed");
+				});
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -341,29 +337,12 @@ class HealthEndpointAutoConfigurationTests {
 	static class HealthAggregatorConfiguration {
 
 		@Bean
-		HealthAggregator healthAggregator() {
-			return new AbstractHealthAggregator() {
+		org.springframework.boot.actuate.health.HealthAggregator healthAggregator() {
+			return new org.springframework.boot.actuate.health.AbstractHealthAggregator() {
 
 				@Override
 				protected Status aggregateStatus(List<Status> candidates) {
 					return Status.UNKNOWN;
-				}
-
-			};
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class HealthStatusHttpMapperConfiguration {
-
-		@Bean
-		HealthStatusHttpMapper healthStatusHttpMapper() {
-			return new HealthStatusHttpMapper() {
-
-				@Override
-				public int mapStatus(Status status) {
-					return 123;
 				}
 
 			};
@@ -449,6 +428,16 @@ class HealthEndpointAutoConfigurationTests {
 		@Bean
 		ReactiveHealthEndpointWebExtension reactiveHealthEndpointWebExtension() {
 			return mock(ReactiveHealthEndpointWebExtension.class);
+		}
+
+	}
+
+	static class TestHealthEndpointGroupsPostProcessor implements HealthEndpointGroupsPostProcessor {
+
+		@Override
+		public HealthEndpointGroups postProcessHealthEndpointGroups(HealthEndpointGroups groups) {
+			given(groups.get("test")).willThrow(new RuntimeException("postprocessed"));
+			return groups;
 		}
 
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 
 package org.springframework.boot.autoconfigure.session;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.EnumSet;
 
 import javax.servlet.DispatcherType;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
@@ -31,6 +31,7 @@ import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.session.MapSessionRepository;
 import org.springframework.session.SessionRepository;
 import org.springframework.session.config.annotation.web.http.EnableSpringHttpSession;
@@ -43,6 +44,8 @@ import org.springframework.session.web.http.SessionRepositoryFilter;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -98,8 +101,7 @@ class SessionAutoConfigurationTests extends AbstractSessionAutoConfigurationTest
 		this.contextRunner
 				.withUserConfiguration(ServerPropertiesConfiguration.class, SessionRepositoryConfiguration.class)
 				.withPropertyValues("server.servlet.session.timeout=1", "spring.session.timeout=3")
-				.run((context) -> assertThat(context.getBean(SessionProperties.class).getTimeout())
-						.isEqualTo(Duration.ofSeconds(3)));
+				.run((context) -> assertThat(context.getBean(SessionProperties.class).getTimeout()).hasSeconds(3));
 	}
 
 	@Test
@@ -107,8 +109,7 @@ class SessionAutoConfigurationTests extends AbstractSessionAutoConfigurationTest
 		this.contextRunner
 				.withUserConfiguration(ServerPropertiesConfiguration.class, SessionRepositoryConfiguration.class)
 				.withPropertyValues("server.servlet.session.timeout=3")
-				.run((context) -> assertThat(context.getBean(SessionProperties.class).getTimeout())
-						.isEqualTo(Duration.ofSeconds(3)));
+				.run((context) -> assertThat(context.getBean(SessionProperties.class).getTimeout()).hasSeconds(3));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -139,6 +140,17 @@ class SessionAutoConfigurationTests extends AbstractSessionAutoConfigurationTest
 					FilterRegistrationBean<?> registration = context.getBean(FilterRegistrationBean.class);
 					assertThat((EnumSet<DispatcherType>) ReflectionTestUtils.getField(registration, "dispatcherTypes"))
 							.containsOnly(DispatcherType.ERROR, DispatcherType.REQUEST);
+				});
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void emptyFilterDispatcherTypesDoNotThrowException() {
+		this.contextRunner.withUserConfiguration(SessionRepositoryConfiguration.class)
+				.withPropertyValues("spring.session.servlet.filter-dispatcher-types=").run((context) -> {
+					FilterRegistrationBean<?> registration = context.getBean(FilterRegistrationBean.class);
+					Object dispatcherTypes = ReflectionTestUtils.getField(registration, "dispatcherTypes");
+					assertThat((EnumSet<DispatcherType>) dispatcherTypes).isEmpty();
 				});
 	}
 
@@ -205,6 +217,16 @@ class SessionAutoConfigurationTests extends AbstractSessionAutoConfigurationTest
 			DefaultCookieSerializer cookieSerializer = context.getBean(DefaultCookieSerializer.class);
 			assertThat(cookieSerializer).hasFieldOrPropertyWithValue("rememberMeRequestAttribute",
 					SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR);
+		});
+	}
+
+	@Test
+	void cookieSerializerCustomization() {
+		this.contextRunner.withBean(CookieSerializerCustomization.class).run((context) -> {
+			CookieSerializerCustomization customization = context.getBean(CookieSerializerCustomization.class);
+			InOrder inOrder = inOrder(customization.customizer1, customization.customizer2);
+			inOrder.verify(customization.customizer1).customize(any());
+			inOrder.verify(customization.customizer2).customize(any());
 		});
 	}
 
@@ -275,6 +297,28 @@ class SessionAutoConfigurationTests extends AbstractSessionAutoConfigurationTest
 		@Bean
 		SpringSessionRememberMeServices rememberMeServices() {
 			return new SpringSessionRememberMeServices();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@EnableSpringHttpSession
+	static class CookieSerializerCustomization extends SessionRepositoryConfiguration {
+
+		private final DefaultCookieSerializerCustomizer customizer1 = mock(DefaultCookieSerializerCustomizer.class);
+
+		private final DefaultCookieSerializerCustomizer customizer2 = mock(DefaultCookieSerializerCustomizer.class);
+
+		@Bean
+		@Order(1)
+		DefaultCookieSerializerCustomizer customizer1() {
+			return this.customizer1;
+		}
+
+		@Bean
+		@Order(2)
+		DefaultCookieSerializerCustomizer customizer2() {
+			return this.customizer2;
 		}
 
 	}

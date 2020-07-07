@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,15 +60,13 @@ public class NettyWebServerFactoryCustomizer
 		PropertyMapper propertyMapper = PropertyMapper.get().alwaysApplyingWhenNonNull();
 		propertyMapper.from(this.serverProperties::getMaxHttpHeaderSize)
 				.to((maxHttpRequestHeaderSize) -> customizeMaxHttpHeaderSize(factory, maxHttpRequestHeaderSize));
-		propertyMapper.from(this.serverProperties::getConnectionTimeout)
-				.to((connectionTimeout) -> customizeGenericConnectionTimeout(factory, connectionTimeout));
 		ServerProperties.Netty nettyProperties = this.serverProperties.getNetty();
 		propertyMapper.from(nettyProperties::getConnectionTimeout).whenNonNull()
 				.to((connectionTimeout) -> customizeConnectionTimeout(factory, connectionTimeout));
 	}
 
 	private boolean getOrDeduceUseForwardHeaders() {
-		if (this.serverProperties.getForwardHeadersStrategy().equals(ServerProperties.ForwardHeadersStrategy.NONE)) {
+		if (this.serverProperties.getForwardHeadersStrategy() == null) {
 			CloudPlatform platform = CloudPlatform.getActive(this.environment);
 			return platform != null && platform.isUsingForwardHeaders();
 		}
@@ -80,17 +78,9 @@ public class NettyWebServerFactoryCustomizer
 				(httpRequestDecoderSpec) -> httpRequestDecoderSpec.maxHeaderSize((int) maxHttpHeaderSize.toBytes())));
 	}
 
-	private void customizeGenericConnectionTimeout(NettyReactiveWebServerFactory factory, Duration connectionTimeout) {
-		if (!connectionTimeout.isZero()) {
-			long timeoutMillis = connectionTimeout.isNegative() ? 0 : connectionTimeout.toMillis();
-			factory.addServerCustomizers((httpServer) -> httpServer.tcpConfiguration((tcpServer) -> tcpServer
-					.selectorOption(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutMillis)));
-		}
-	}
-
 	private void customizeConnectionTimeout(NettyReactiveWebServerFactory factory, Duration connectionTimeout) {
-		factory.addServerCustomizers((httpServer) -> httpServer.tcpConfiguration((tcpServer) -> tcpServer
-				.selectorOption(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) connectionTimeout.toMillis())));
+		factory.addServerCustomizers((httpServer) -> httpServer.option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
+				(int) connectionTimeout.toMillis()));
 	}
 
 }

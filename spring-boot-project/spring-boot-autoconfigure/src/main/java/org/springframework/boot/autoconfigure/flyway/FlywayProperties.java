@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,9 +65,20 @@ public class FlywayProperties {
 	private int connectRetries;
 
 	/**
+	 * Default schema name managed by Flyway (case-sensitive).
+	 */
+	private String defaultSchema;
+
+	/**
 	 * Scheme names managed by Flyway (case-sensitive).
 	 */
 	private List<String> schemas = new ArrayList<>();
+
+	/**
+	 * Whether Flyway should attempt to create the schemas specified in the schemas
+	 * property.
+	 */
+	private boolean createSchemas = true;
 
 	/**
 	 * Name of the schema history table that will be used by Flyway.
@@ -226,6 +237,12 @@ public class FlywayProperties {
 	private boolean skipDefaultResolvers;
 
 	/**
+	 * Whether to validate migrations and callbacks whose scripts do not obey the correct
+	 * naming convention.
+	 */
+	private boolean validateMigrationNaming = false;
+
+	/**
 	 * Whether to automatically call validate when performing a migration.
 	 */
 	private boolean validateOnMigrate = true;
@@ -316,12 +333,28 @@ public class FlywayProperties {
 		this.connectRetries = connectRetries;
 	}
 
+	public String getDefaultSchema() {
+		return this.defaultSchema;
+	}
+
+	public void setDefaultSchema(String defaultSchema) {
+		this.defaultSchema = defaultSchema;
+	}
+
 	public List<String> getSchemas() {
 		return this.schemas;
 	}
 
 	public void setSchemas(List<String> schemas) {
 		this.schemas = schemas;
+	}
+
+	public boolean isCreateSchemas() {
+		return this.createSchemas;
+	}
+
+	public void setCreateSchemas(boolean createSchemas) {
+		this.createSchemas = createSchemas;
 	}
 
 	public String getTable() {
@@ -566,6 +599,14 @@ public class FlywayProperties {
 
 	public void setSkipDefaultResolvers(boolean skipDefaultResolvers) {
 		this.skipDefaultResolvers = skipDefaultResolvers;
+	}
+
+	public boolean isValidateMigrationNaming() {
+		return this.validateMigrationNaming;
+	}
+
+	public void setValidateMigrationNaming(boolean validateMigrationNaming) {
+		this.validateMigrationNaming = validateMigrationNaming;
 	}
 
 	public boolean isValidateOnMigrate() {

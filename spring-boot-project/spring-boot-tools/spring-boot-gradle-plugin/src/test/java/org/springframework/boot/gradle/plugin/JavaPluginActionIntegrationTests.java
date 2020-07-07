@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,77 +37,77 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  */
 @ExtendWith(GradleCompatibilityExtension.class)
-public class JavaPluginActionIntegrationTests {
+class JavaPluginActionIntegrationTests {
 
 	GradleBuild gradleBuild;
 
 	@TestTemplate
-	public void noBootJarTaskWithoutJavaPluginApplied() {
+	void noBootJarTaskWithoutJavaPluginApplied() {
 		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootJar").getOutput())
 				.contains("bootJar exists = false");
 	}
 
 	@TestTemplate
-	public void applyingJavaPluginCreatesBootJarTask() {
+	void applyingJavaPluginCreatesBootJarTask() {
 		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootJar", "-PapplyJavaPlugin").getOutput())
 				.contains("bootJar exists = true");
 	}
 
 	@TestTemplate
-	public void noBootRunTaskWithoutJavaPluginApplied() {
+	void noBootRunTaskWithoutJavaPluginApplied() {
 		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootRun").getOutput())
 				.contains("bootRun exists = false");
 	}
 
 	@TestTemplate
-	public void applyingJavaPluginCreatesBootRunTask() {
+	void applyingJavaPluginCreatesBootRunTask() {
 		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootRun", "-PapplyJavaPlugin").getOutput())
 				.contains("bootRun exists = true");
 	}
 
 	@TestTemplate
-	public void javaCompileTasksUseUtf8Encoding() {
+	void javaCompileTasksUseUtf8Encoding() {
 		assertThat(this.gradleBuild.build("javaCompileEncoding", "-PapplyJavaPlugin").getOutput())
 				.contains("compileJava = UTF-8").contains("compileTestJava = UTF-8");
 	}
 
 	@TestTemplate
-	public void javaCompileTasksUseParametersCompilerFlagByDefault() {
+	void javaCompileTasksUseParametersCompilerFlagByDefault() {
 		assertThat(this.gradleBuild.build("javaCompileTasksCompilerArgs").getOutput())
 				.contains("compileJava compiler args: [-parameters]")
 				.contains("compileTestJava compiler args: [-parameters]");
 	}
 
 	@TestTemplate
-	public void javaCompileTasksUseParametersAndAdditionalCompilerFlags() {
+	void javaCompileTasksUseParametersAndAdditionalCompilerFlags() {
 		assertThat(this.gradleBuild.build("javaCompileTasksCompilerArgs").getOutput())
 				.contains("compileJava compiler args: [-parameters, -Xlint:all]")
 				.contains("compileTestJava compiler args: [-parameters, -Xlint:all]");
 	}
 
 	@TestTemplate
-	public void javaCompileTasksCanOverrideDefaultParametersCompilerFlag() {
+	void javaCompileTasksCanOverrideDefaultParametersCompilerFlag() {
 		assertThat(this.gradleBuild.build("javaCompileTasksCompilerArgs").getOutput())
 				.contains("compileJava compiler args: [-Xlint:all]")
 				.contains("compileTestJava compiler args: [-Xlint:all]");
 	}
 
 	@TestTemplate
-	public void assembleRunsBootJarAndJarIsSkipped() {
+	void assembleRunsBootJarAndJarIsSkipped() {
 		BuildResult result = this.gradleBuild.build("assemble");
 		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(result.task(":jar").getOutcome()).isEqualTo(TaskOutcome.SKIPPED);
 	}
 
 	@TestTemplate
-	public void errorMessageIsHelpfulWhenMainClassCannotBeResolved() {
+	void errorMessageIsHelpfulWhenMainClassCannotBeResolved() {
 		BuildResult result = this.gradleBuild.buildAndFail("build", "-PapplyJavaPlugin");
 		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.FAILED);
 		assertThat(result.getOutput()).contains("Main class name has not been configured and it could not be resolved");
 	}
 
 	@TestTemplate
-	public void jarAndBootJarCanBothBeBuilt() {
+	void jarAndBootJarCanBothBeBuilt() {
 		BuildResult result = this.gradleBuild.build("assemble");
 		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(result.task(":jar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
@@ -118,7 +118,7 @@ public class JavaPluginActionIntegrationTests {
 	}
 
 	@TestTemplate
-	public void additionalMetadataLocationsConfiguredWhenProcessorIsPresent() throws IOException {
+	void additionalMetadataLocationsConfiguredWhenProcessorIsPresent() throws IOException {
 		createMinimalMainSource();
 		File libs = new File(this.gradleBuild.getProjectDir(), "libs");
 		libs.mkdirs();
@@ -132,11 +132,27 @@ public class JavaPluginActionIntegrationTests {
 	}
 
 	@TestTemplate
-	public void additionalMetadataLocationsNotConfiguredWhenProcessorIsAbsent() throws IOException {
+	void additionalMetadataLocationsNotConfiguredWhenProcessorIsAbsent() throws IOException {
 		createMinimalMainSource();
 		BuildResult result = this.gradleBuild.build("compileJava");
 		assertThat(result.task(":compileJava").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(result.getOutput()).contains("compileJava compiler args: [-parameters]");
+	}
+
+	@TestTemplate
+	void applyingJavaPluginCreatesDevelopmentOnlyConfiguration() {
+		assertThat(this.gradleBuild
+				.build("configurationExists", "-PconfigurationName=developmentOnly", "-PapplyJavaPlugin").getOutput())
+						.contains("developmentOnly exists = true");
+	}
+
+	@TestTemplate
+	void productionRuntimeClasspathIsConfiguredWithAttributes() {
+		assertThat(this.gradleBuild
+				.build("configurationAttributes", "-PconfigurationName=productionRuntimeClasspath", "-PapplyJavaPlugin")
+				.getOutput()).contains("3 productionRuntimeClasspath attributes:")
+						.contains("org.gradle.usage: java-runtime").contains("org.gradle.libraryelements: jar")
+						.contains("org.gradle.dependency.bundling: external");
 	}
 
 	private void createMinimalMainSource() throws IOException {
