@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,10 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.jar.JarFile;
 
 import com.fasterxml.jackson.annotation.JsonView;
@@ -34,6 +37,7 @@ import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.sun.jna.Platform;
 import io.spring.gradle.dependencymanagement.DependencyManagementPlugin;
 import io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension;
+import org.antlr.v4.runtime.Lexer;
 import org.apache.commons.compress.archivers.ArchiveEntry;
 import org.apache.http.HttpRequest;
 import org.apache.http.conn.HttpClientConnectionManager;
@@ -46,6 +50,7 @@ import org.jetbrains.kotlin.daemon.client.KotlinCompilerClient;
 import org.jetbrains.kotlin.gradle.model.KotlinProject;
 import org.jetbrains.kotlin.gradle.plugin.KotlinGradleSubplugin;
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlugin;
+import org.tomlj.Toml;
 
 import org.springframework.asm.ClassVisitor;
 import org.springframework.boot.buildpack.platform.build.BuildRequest;
@@ -72,8 +77,14 @@ public class GradleBuild {
 
 	private GradleVersion expectDeprecationWarnings;
 
+	private boolean configurationCache = false;
+
+	private Map<String, String> scriptProperties = new HashMap<>();
+
 	public GradleBuild() {
 		this(Dsl.GROOVY);
+		this.scriptProperties.put("bootVersion", getBootVersion());
+		this.scriptProperties.put("dependencyManagementPluginVersion", getDependencyManagementPluginVersion());
 	}
 
 	public GradleBuild(Dsl dsl) {
@@ -107,7 +118,8 @@ public class GradleBuild {
 				new File(pathOfJarContaining(HttpRequest.class)), new File(pathOfJarContaining(Module.class)),
 				new File(pathOfJarContaining(Versioned.class)),
 				new File(pathOfJarContaining(ParameterNamesModule.class)),
-				new File(pathOfJarContaining(JsonView.class)), new File(pathOfJarContaining(Platform.class)));
+				new File(pathOfJarContaining(JsonView.class)), new File(pathOfJarContaining(Platform.class)),
+				new File(pathOfJarContaining(Toml.class)), new File(pathOfJarContaining(Lexer.class)));
 	}
 
 	private String pathOfJarContaining(Class<?> type) {
@@ -121,6 +133,16 @@ public class GradleBuild {
 
 	public GradleBuild expectDeprecationWarningsWithAtLeastVersion(String gradleVersion) {
 		this.expectDeprecationWarnings = GradleVersion.version(gradleVersion);
+		return this;
+	}
+
+	public GradleBuild configurationCache() {
+		this.configurationCache = true;
+		return this;
+	}
+
+	public GradleBuild scriptProperty(String key, String value) {
+		this.scriptProperties.put(key, value);
 		return this;
 	}
 
@@ -148,28 +170,40 @@ public class GradleBuild {
 	}
 
 	public GradleRunner prepareRunner(String... arguments) throws IOException {
-		String scriptContent = FileCopyUtils.copyToString(new FileReader(this.script))
-				.replace("{version}", getBootVersion())
-				.replace("{dependency-management-plugin-version}", getDependencyManagementPluginVersion());
+		String scriptContent = FileCopyUtils.copyToString(new FileReader(this.script));
+		for (Entry<String, String> property : this.scriptProperties.entrySet()) {
+			scriptContent = scriptContent.replace("{" + property.getKey() + "}", property.getValue());
+		}
 		FileCopyUtils.copy(scriptContent, new FileWriter(new File(this.projectDir, "build" + this.dsl.getExtension())));
 		FileSystemUtils.copyRecursively(new File("src/test/resources/repository"),
 				new File(this.projectDir, "repository"));
 		GradleRunner gradleRunner = GradleRunner.create().withProjectDir(this.projectDir)
 				.withPluginClasspath(pluginClasspath());
-		if (this.dsl != Dsl.KOTLIN) {
+		if (this.dsl != Dsl.KOTLIN && !this.configurationCache) {
 			// see https://github.com/gradle/gradle/issues/6862
 			gradleRunner.withDebug(true);
 		}
 		if (this.gradleVersion != null) {
 			gradleRunner.withGradleVersion(this.gradleVersion);
 		}
+		gradleRunner.withTestKitDir(getTestKitDir());
 		List<String> allArguments = new ArrayList<>();
 		allArguments.add("-PbootVersion=" + getBootVersion());
 		allArguments.add("--stacktrace");
 		allArguments.addAll(Arrays.asList(arguments));
 		allArguments.add("--warning-mode");
 		allArguments.add("all");
+		if (this.configurationCache) {
+			allArguments.add("--configuration-cache");
+		}
 		return gradleRunner.withArguments(allArguments);
+	}
+
+	private File getTestKitDir() {
+		File temp = new File(System.getProperty("java.io.tmpdir"));
+		String username = System.getProperty("user.name");
+		String gradleVersion = (this.gradleVersion != null) ? this.gradleVersion : "default";
+		return new File(temp, ".gradle-test-kit-" + username + "-" + getBootVersion() + "-" + gradleVersion);
 	}
 
 	public File getProjectDir() {

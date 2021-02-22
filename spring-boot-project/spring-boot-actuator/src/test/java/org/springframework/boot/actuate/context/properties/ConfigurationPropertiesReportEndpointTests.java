@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,12 +34,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.ConstructorBinding;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.boot.context.properties.bind.Name;
+import org.springframework.boot.origin.Origin;
+import org.springframework.boot.origin.OriginLookup;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.ContextConsumer;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.mock.env.MockPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -69,7 +74,7 @@ class ConfigurationPropertiesReportEndpointTests {
 	void descriptorWithValueObjectBindMethodDetectsRelevantProperties() {
 		this.contextRunner.withUserConfiguration(ImmutablePropertiesConfiguration.class).run(assertProperties(
 				"immutable",
-				(properties) -> assertThat(properties).containsOnlyKeys("dbPassword", "myTestProperty", "duration")));
+				(properties) -> assertThat(properties).containsOnlyKeys("dbPassword", "myTestProperty", "for")));
 	}
 
 	@Test
@@ -281,6 +286,23 @@ class ConfigurationPropertiesReportEndpointTests {
 				}));
 	}
 
+	@Test
+	void originParents() {
+		this.contextRunner.withUserConfiguration(SensiblePropertiesConfiguration.class)
+				.withInitializer(this::initializeOriginParents).run(assertProperties("sensible", (properties) -> {
+				}, (inputs) -> {
+					Map<String, Object> stringInputs = (Map<String, Object>) inputs.get("string");
+					String[] originParents = (String[]) stringInputs.get("originParents");
+					assertThat(originParents).containsExactly("spring", "boot");
+				}));
+	}
+
+	private void initializeOriginParents(ConfigurableApplicationContext context) {
+		MockPropertySource propertySource = new OriginParentMockPropertySource();
+		propertySource.setProperty("sensible.string", "spring");
+		context.getEnvironment().getPropertySources().addFirst(propertySource);
+	}
+
 	private ContextConsumer<AssertableApplicationContext> assertProperties(String prefix,
 			Consumer<Map<String, Object>> properties) {
 		return assertProperties(prefix, properties, (inputs) -> {
@@ -308,6 +330,38 @@ class ConfigurationPropertiesReportEndpointTests {
 		int separator = id.indexOf("-");
 		String candidate = (separator != -1) ? id.substring(0, separator) : id;
 		return prefix.equals(candidate);
+	}
+
+	static class OriginParentMockPropertySource extends MockPropertySource implements OriginLookup<String> {
+
+		@Override
+		public Origin getOrigin(String key) {
+			return new MockOrigin(key, new MockOrigin("spring", new MockOrigin("boot", null)));
+		}
+
+	}
+
+	static class MockOrigin implements Origin {
+
+		private final String value;
+
+		private final MockOrigin parent;
+
+		MockOrigin(String value, MockOrigin parent) {
+			this.value = value;
+			this.parent = parent;
+		}
+
+		@Override
+		public Origin getParent() {
+			return this.parent;
+		}
+
+		@Override
+		public String toString() {
+			return this.value;
+		}
+
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -398,16 +452,16 @@ class ConfigurationPropertiesReportEndpointTests {
 
 		private final String nullValue;
 
-		private final Duration duration;
+		private final Duration forDuration;
 
 		private final String ignored;
 
 		ImmutableProperties(@DefaultValue("123456") String dbPassword, @DefaultValue("654321") String myTestProperty,
-				String nullValue, @DefaultValue("10s") Duration duration) {
+				String nullValue, @DefaultValue("10s") @Name("for") Duration forDuration) {
 			this.dbPassword = dbPassword;
 			this.myTestProperty = myTestProperty;
 			this.nullValue = nullValue;
-			this.duration = duration;
+			this.forDuration = forDuration;
 			this.ignored = "dummy";
 		}
 
@@ -423,8 +477,8 @@ class ConfigurationPropertiesReportEndpointTests {
 			return this.nullValue;
 		}
 
-		public Duration getDuration() {
-			return this.duration;
+		public Duration getFor() {
+			return this.forDuration;
 		}
 
 		public String getIgnored() {
@@ -649,6 +703,8 @@ class ConfigurationPropertiesReportEndpointTests {
 	@ConfigurationProperties("sensible")
 	public static class SensibleProperties {
 
+		private String string;
+
 		private URI sensitiveUri = URI.create("http://user:password@localhost:8080");
 
 		private URI noPasswordUri = URI.create("http://user:@localhost:8080");
@@ -664,6 +720,14 @@ class ConfigurationPropertiesReportEndpointTests {
 		SensibleProperties() {
 			this.listItems.add(new ListItem());
 			this.listOfListItems.add(Collections.singletonList(new ListItem()));
+		}
+
+		public void setString(String string) {
+			this.string = string;
+		}
+
+		public String getString() {
+			return this.string;
 		}
 
 		public void setSensitiveUri(URI sensitiveUri) {

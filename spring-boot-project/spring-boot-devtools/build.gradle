@@ -59,6 +59,7 @@ dependencies {
 	testImplementation("org.hsqldb:hsqldb")
 	testImplementation("org.junit.jupiter:junit-jupiter")
 	testImplementation("org.mockito:mockito-core")
+	testImplementation("org.mockito:mockito-junit-jupiter")
 	testImplementation("org.postgresql:postgresql")
 	testImplementation("org.springframework:spring-test")
 	testImplementation("org.springframework:spring-webmvc")
@@ -69,11 +70,10 @@ dependencies {
 	testImplementation("org.thymeleaf:thymeleaf-spring5")
 	testImplementation("nz.net.ultraq.thymeleaf:thymeleaf-layout-dialect")
 
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	testRuntimeOnly("org.yaml:snakeyaml")
 }
 
-task copyIntTestDependencies(type: Copy) {
+task syncIntTestDependencies(type: Sync) {
 	destinationDir = file("${buildDir}/dependencies")
 	from {
 		configurations.intTestDependencies
@@ -82,5 +82,5 @@ task copyIntTestDependencies(type: Copy) {
 }
 
 intTest {
-	dependsOn copyIntTestDependencies
+	dependsOn syncIntTestDependencies
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.security.saml2.provider.service.registration.Saml2MessageBinding;
 
@@ -39,7 +38,7 @@ public class Saml2RelyingPartyProperties {
 	/**
 	 * SAML2 relying party registrations.
 	 */
-	private Map<String, Registration> registration = new LinkedHashMap<>();
+	private final Map<String, Registration> registration = new LinkedHashMap<>();
 
 	public Map<String, Registration> getRegistration() {
 		return this.registration;
@@ -50,26 +49,86 @@ public class Saml2RelyingPartyProperties {
 	 */
 	public static class Registration {
 
+		/**
+		 * Relying party's entity ID. The value may contain a number of placeholders. They
+		 * are "baseUrl", "registrationId", "baseScheme", "baseHost", and "basePort".
+		 */
+		private String entityId = "{baseUrl}/saml2/service-provider-metadata/{registrationId}";
+
+		/**
+		 * Assertion Consumer Service.
+		 */
+		private final Acs acs = new Acs();
+
 		private final Signing signing = new Signing();
+
+		private final Decryption decryption = new Decryption();
 
 		/**
 		 * Remote SAML Identity Provider.
 		 */
-		private Identityprovider identityprovider = new Identityprovider();
+		private final Identityprovider identityprovider = new Identityprovider();
+
+		public String getEntityId() {
+			return this.entityId;
+		}
+
+		public void setEntityId(String entityId) {
+			this.entityId = entityId;
+		}
+
+		public Acs getAcs() {
+			return this.acs;
+		}
 
 		public Signing getSigning() {
 			return this.signing;
+		}
+
+		public Decryption getDecryption() {
+			return this.decryption;
 		}
 
 		public Identityprovider getIdentityprovider() {
 			return this.identityprovider;
 		}
 
+		public static class Acs {
+
+			/**
+			 * Assertion Consumer Service location template. Can generate its location
+			 * based on possible variables of "baseUrl", "registrationId", "baseScheme",
+			 * "baseHost", and "basePort".
+			 */
+			private String location = "{baseUrl}/login/saml2/sso/{registrationId}";
+
+			/**
+			 * Assertion Consumer Service binding.
+			 */
+			private Saml2MessageBinding binding = Saml2MessageBinding.POST;
+
+			public String getLocation() {
+				return this.location;
+			}
+
+			public void setLocation(String location) {
+				this.location = location;
+			}
+
+			public Saml2MessageBinding getBinding() {
+				return this.binding;
+			}
+
+			public void setBinding(Saml2MessageBinding binding) {
+				this.binding = binding;
+			}
+
+		}
+
 		public static class Signing {
 
 			/**
-			 * Credentials used for signing and decrypting the SAML authentication
-			 * request.
+			 * Credentials used for signing the SAML authentication request.
 			 */
 			private List<Credential> credentials = new ArrayList<>();
 
@@ -77,10 +136,14 @@ public class Saml2RelyingPartyProperties {
 				return this.credentials;
 			}
 
+			public void setCredentials(List<Credential> credentials) {
+				this.credentials = credentials;
+			}
+
 			public static class Credential {
 
 				/**
-				 * Private key used for signing or decrypting.
+				 * Private key used for signing.
 				 */
 				private Resource privateKeyLocation;
 
@@ -111,6 +174,53 @@ public class Saml2RelyingPartyProperties {
 
 	}
 
+	public static class Decryption {
+
+		/**
+		 * Credentials used for decrypting the SAML authentication request.
+		 */
+		private List<Credential> credentials = new ArrayList<>();
+
+		public List<Credential> getCredentials() {
+			return this.credentials;
+		}
+
+		public void setCredentials(List<Credential> credentials) {
+			this.credentials = credentials;
+		}
+
+		public static class Credential {
+
+			/**
+			 * Private key used for decrypting.
+			 */
+			private Resource privateKeyLocation;
+
+			/**
+			 * Relying Party X509Certificate shared with the identity provider.
+			 */
+			private Resource certificateLocation;
+
+			public Resource getPrivateKeyLocation() {
+				return this.privateKeyLocation;
+			}
+
+			public void setPrivateKeyLocation(Resource privateKey) {
+				this.privateKeyLocation = privateKey;
+			}
+
+			public Resource getCertificateLocation() {
+				return this.certificateLocation;
+			}
+
+			public void setCertificateLocation(Resource certificate) {
+				this.certificateLocation = certificate;
+			}
+
+		}
+
+	}
+
 	/**
 	 * Represents a remote Identity Provider.
 	 */
@@ -121,9 +231,14 @@ public class Saml2RelyingPartyProperties {
 		 */
 		private String entityId;
 
-		private Singlesignon singlesignon = new Singlesignon();
+		/**
+		 * URI to the metadata endpoint for discovery-based configuration.
+		 */
+		private String metadataUri;
 
-		private Verification verification = new Verification();
+		private final Singlesignon singlesignon = new Singlesignon();
+
+		private final Verification verification = new Verification();
 
 		public String getEntityId() {
 			return this.entityId;
@@ -133,15 +248,12 @@ public class Saml2RelyingPartyProperties {
 			this.entityId = entityId;
 		}
 
-		@Deprecated
-		@DeprecatedConfigurationProperty(reason = "moved to 'singlesignon.url'")
-		public String getSsoUrl() {
-			return this.singlesignon.getUrl();
+		public String getMetadataUri() {
+			return this.metadataUri;
 		}
 
-		@Deprecated
-		public void setSsoUrl(String ssoUrl) {
-			this.singlesignon.setUrl(ssoUrl);
+		public void setMetadataUri(String metadataUri) {
+			this.metadataUri = metadataUri;
 		}
 
 		public Singlesignon getSinglesignon() {
@@ -210,6 +322,10 @@ public class Saml2RelyingPartyProperties {
 
 			public List<Credential> getCredentials() {
 				return this.credentials;
+			}
+
+			public void setCredentials(List<Credential> credentials) {
+				this.credentials = credentials;
 			}
 
 			public static class Credential {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,20 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.boot.maven;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
 
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +41,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @ExtendWith(MavenBuildExtension.class)
 class JarIntegrationTests extends AbstractArchiveIntegrationTests {
+
+	@Override
+	protected String getLayersIndexLocation() {
+		return "BOOT-INF/layers.idx";
+	}
 
 	@TestTemplate
 	void whenJarIsRepackagedInPlaceOnlyRepackagedJarIsInstalled(MavenBuild mavenBuild) {
@@ -297,22 +298,36 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void whenJarIsRepackagedWithLayersEnabledTheJarContainsTheLayersIndex(MavenBuild mavenBuild) {
+	void repackagedJarContainsTheLayersIndexByDefault(MavenBuild mavenBuild) {
 		mavenBuild.project("jar-layered").execute((project) -> {
 			File repackaged = new File(project, "jar/target/jar-layered-0.0.1.BUILD-SNAPSHOT.jar");
 			assertThat(jar(repackaged)).hasEntryWithNameStartingWith("BOOT-INF/classes/")
 					.hasEntryWithNameStartingWith("BOOT-INF/lib/jar-release")
 					.hasEntryWithNameStartingWith("BOOT-INF/lib/jar-snapshot").hasEntryWithNameStartingWith(
 							"BOOT-INF/lib/" + JarModeLibrary.LAYER_TOOLS.getCoordinates().getArtifactId());
-			try {
-				try (JarFile jarFile = new JarFile(repackaged)) {
-					Map<String, List<String>> layerIndex = readLayerIndex(jarFile);
-					assertThat(layerIndex.keySet()).containsExactly("dependencies", "spring-boot-loader",
-							"snapshot-dependencies", "application");
-				}
+			try (JarFile jarFile = new JarFile(repackaged)) {
+				Map<String, List<String>> layerIndex = readLayerIndex(jarFile);
+				assertThat(layerIndex.keySet()).containsExactly("dependencies", "spring-boot-loader",
+						"snapshot-dependencies", "application");
+				assertThat(layerIndex.get("application")).contains("BOOT-INF/lib/jar-release-0.0.1.RELEASE.jar",
+						"BOOT-INF/lib/jar-snapshot-0.0.1.BUILD-SNAPSHOT.jar");
+				assertThat(layerIndex.get("dependencies"))
+						.anyMatch((dependency) -> dependency.startsWith("BOOT-INF/lib/log4j-api-2"));
 			}
 			catch (IOException ex) {
 			}
+		});
+	}
+
+	@TestTemplate
+	void whenJarIsRepackagedWithTheLayersDisabledDoesNotContainLayersIndex(MavenBuild mavenBuild) {
+		mavenBuild.project("jar-layered-disabled").execute((project) -> {
+			File repackaged = new File(project, "jar/target/jar-layered-0.0.1.BUILD-SNAPSHOT.jar");
+			assertThat(jar(repackaged)).hasEntryWithNameStartingWith("BOOT-INF/classes/")
+					.hasEntryWithNameStartingWith("BOOT-INF/lib/jar-release")
+					.hasEntryWithNameStartingWith("BOOT-INF/lib/jar-snapshot")
+					.doesNotHaveEntryWithName("BOOT-INF/layers.idx")
+					.doesNotHaveEntryWithNameStartingWith("BOOT-INF/lib/" + JarModeLibrary.LAYER_TOOLS.getName());
 		});
 	}
 
@@ -323,6 +338,7 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 			assertThat(jar(repackaged)).hasEntryWithNameStartingWith("BOOT-INF/classes/")
 					.hasEntryWithNameStartingWith("BOOT-INF/lib/jar-release")
 					.hasEntryWithNameStartingWith("BOOT-INF/lib/jar-snapshot")
+					.hasEntryWithNameStartingWith("BOOT-INF/layers.idx")
 					.doesNotHaveEntryWithNameStartingWith("BOOT-INF/lib/" + JarModeLibrary.LAYER_TOOLS.getName());
 		});
 	}
@@ -338,6 +354,11 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 				Map<String, List<String>> layerIndex = readLayerIndex(jarFile);
 				assertThat(layerIndex.keySet()).containsExactly("my-dependencies-name", "snapshot-dependencies",
 						"configuration", "application");
+				assertThat(layerIndex.get("application"))
+						.contains("BOOT-INF/lib/jar-release-0.0.1.RELEASE.jar",
+								"BOOT-INF/lib/jar-snapshot-0.0.1.BUILD-SNAPSHOT.jar",
+								"BOOT-INF/lib/jar-classifier-0.0.1-bravo.jar")
+						.doesNotContain("BOOT-INF/lib/jar-classifier-0.0.1-alpha.jar");
 			}
 		});
 	}
@@ -371,25 +392,6 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 			}
 		});
 		return jarHash.get();
-	}
-
-	private Map<String, List<String>> readLayerIndex(JarFile jarFile) throws IOException {
-		Map<String, List<String>> index = new LinkedHashMap<>();
-		ZipEntry indexEntry = jarFile.getEntry("BOOT-INF/layers.idx");
-		try (BufferedReader reader = new BufferedReader(new InputStreamReader(jarFile.getInputStream(indexEntry)))) {
-			String line = reader.readLine();
-			String layer = null;
-			while (line != null) {
-				if (line.startsWith("- ")) {
-					layer = line.substring(3, line.length() - 2);
-				}
-				else if (line.startsWith("  - ")) {
-					index.computeIfAbsent(layer, (key) -> new ArrayList<>()).add(line.substring(5, line.length() - 1));
-				}
-				line = reader.readLine();
-			}
-			return index;
-		}
 	}
 
 }

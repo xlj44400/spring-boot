@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
-import org.eclipse.jetty.util.component.AbstractLifeCycle;
 
 import org.springframework.boot.web.server.GracefulShutdownCallback;
 import org.springframework.boot.web.server.GracefulShutdownResult;
@@ -120,18 +119,7 @@ public class JettyWebServer implements WebServer {
 				// Cache the connectors and then remove them to prevent requests being
 				// handled before the application context is ready.
 				this.connectors = this.server.getConnectors();
-				this.server.addBean(new AbstractLifeCycle() {
-
-					@Override
-					protected void doStart() throws Exception {
-						for (Connector connector : JettyWebServer.this.connectors) {
-							Assert.state(connector.isStopped(),
-									() -> "Connector " + connector + " has been started prematurely");
-						}
-						JettyWebServer.this.server.setConnectors(null);
-					}
-
-				});
+				JettyWebServer.this.server.setConnectors(null);
 				// Start the server so that the ServletContext is available
 				this.server.start();
 				this.server.setStopAtShutdown(false);
@@ -207,18 +195,6 @@ public class JettyWebServer implements WebServer {
 		return ports.toString();
 	}
 
-	private Integer getLocalPort(Connector connector) {
-		try {
-			// Jetty 9 internals are different, but the method name is the same
-			return (Integer) ReflectionUtils
-					.invokeMethod(ReflectionUtils.findMethod(connector.getClass(), "getLocalPort"), connector);
-		}
-		catch (Exception ex) {
-			logger.info("could not determine port ( " + ex.getMessage() + ")");
-			return 0;
-		}
-	}
-
 	private String getProtocols(Connector connector) {
 		List<String> protocols = connector.getProtocols();
 		return " (" + StringUtils.collectionToDelimitedString(protocols, ", ") + ")";
@@ -276,8 +252,29 @@ public class JettyWebServer implements WebServer {
 	public int getPort() {
 		Connector[] connectors = this.server.getConnectors();
 		for (Connector connector : connectors) {
-			// Probably only one...
-			return getLocalPort(connector);
+			Integer localPort = getLocalPort(connector);
+			if (localPort != null && localPort > 0) {
+				return localPort;
+			}
+		}
+		return -1;
+	}
+
+	private Integer getLocalPort(Connector connector) {
+		try {
+			if (connector instanceof NetworkConnector) {
+				return ((NetworkConnector) connector).getLocalPort();
+			}
+		}
+		catch (Exception ex) {
+		}
+		try {
+			// Jetty 9 internals are different, but the method name is the same
+			return (Integer) ReflectionUtils
+					.invokeMethod(ReflectionUtils.findMethod(connector.getClass(), "getLocalPort"), connector);
+		}
+		catch (Exception ex) {
+			logger.info("could not determine port (" + ex.getMessage() + ")");
 		}
 		return 0;
 	}

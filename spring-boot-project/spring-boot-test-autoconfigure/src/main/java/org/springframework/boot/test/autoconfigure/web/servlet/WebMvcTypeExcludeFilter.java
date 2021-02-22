@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,8 +49,9 @@ public final class WebMvcTypeExcludeFilter extends StandardAnnotationCustomizabl
 
 	private static final Class<?>[] NO_CONTROLLERS = {};
 
-	private static final String[] OPTIONAL_INCLUDES = {
-			"org.springframework.security.config.annotation.web.WebSecurityConfigurer" };
+	private static final String[] OPTIONAL_INCLUDES = { "com.fasterxml.jackson.databind.Module",
+			"org.springframework.security.config.annotation.web.WebSecurityConfigurer",
+			"org.springframework.security.web.SecurityFilterChain", "org.thymeleaf.dialect.IDialect" };
 
 	private static final Set<Class<?>> DEFAULT_INCLUDES;
 

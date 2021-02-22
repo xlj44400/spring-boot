@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,23 @@
 
 package org.springframework.boot.buildpack.platform.docker;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.boot.buildpack.platform.docker.DockerApi.ContainerApi;
 import org.springframework.boot.buildpack.platform.docker.DockerApi.ImageApi;
@@ -47,11 +51,15 @@ import org.springframework.boot.buildpack.platform.io.Content;
 import org.springframework.boot.buildpack.platform.io.IOConsumer;
 import org.springframework.boot.buildpack.platform.io.Owner;
 import org.springframework.boot.buildpack.platform.io.TarArchive;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -64,6 +72,7 @@ import static org.mockito.Mockito.verify;
  * @author Phillip Webb
  * @author Scott Frederick
  */
+@ExtendWith(MockitoExtension.class)
 class DockerApiTests {
 
 	private static final String API_URL = "/" + DockerApi.API_VERSION;
@@ -81,7 +90,6 @@ class DockerApiTests {
 
 	@BeforeEach
 	void setup() {
-		MockitoAnnotations.initMocks(this);
 		this.dockerApi = new DockerApi(this.http);
 	}
 
@@ -111,6 +119,12 @@ class DockerApiTests {
 		};
 	}
 
+	@Test
+	void createDockerApi() {
+		DockerApi api = new DockerApi();
+		assertThat(api).isNotNull();
+	}
+
 	@Nested
 	class ImageDockerApiTests {
 
@@ -120,6 +134,9 @@ class DockerApiTests {
 		private UpdateListener<PullImageUpdateEvent> pullListener;
 
 		@Mock
+		private UpdateListener<PushImageUpdateEvent> pushListener;
+
+		@Mock
 		private UpdateListener<LoadImageUpdateEvent> loadListener;
 
 		@Captor
@@ -127,7 +144,6 @@ class DockerApiTests {
 
 		@BeforeEach
 		void setup() {
-			MockitoAnnotations.initMocks(this);
 			this.api = DockerApiTests.this.dockerApi.image();
 		}
 
@@ -149,7 +165,7 @@ class DockerApiTests {
 			URI createUri = new URI(IMAGES_URL + "/create?fromImage=gcr.io%2Fpaketo-buildpacks%2Fbuilder%3Abase");
 			String imageHash = "4acb6bfd6c4f0cabaf7f3690e444afe51f1c7de54d51da7e63fac709c56f1c30";
 			URI imageUri = new URI(IMAGES_URL + "/gcr.io/paketo-buildpacks/builder@sha256:" + imageHash + "/json");
-			given(http().post(createUri)).willReturn(responseOf("pull-stream.json"));
+			given(http().post(eq(createUri), isNull())).willReturn(responseOf("pull-stream.json"));
 			given(http().get(imageUri)).willReturn(responseOf("type/image.json"));
 			Image image = this.api.pull(reference, this.pullListener);
 			assertThat(image.getLayers()).hasSize(46);
@@ -157,6 +173,57 @@ class DockerApiTests {
 			ordered.verify(this.pullListener).onStart();
 			ordered.verify(this.pullListener, times(595)).onUpdate(any());
 			ordered.verify(this.pullListener).onFinish();
+		}
+
+		@Test
+		void pullWithRegistryAuthPullsImageAndProducesEvents() throws Exception {
+			ImageReference reference = ImageReference.of("gcr.io/paketo-buildpacks/builder:base");
+			URI createUri = new URI(IMAGES_URL + "/create?fromImage=gcr.io%2Fpaketo-buildpacks%2Fbuilder%3Abase");
+			String imageHash = "4acb6bfd6c4f0cabaf7f3690e444afe51f1c7de54d51da7e63fac709c56f1c30";
+			URI imageUri = new URI(IMAGES_URL + "/gcr.io/paketo-buildpacks/builder@sha256:" + imageHash + "/json");
+			given(http().post(eq(createUri), eq("auth token"))).willReturn(responseOf("pull-stream.json"));
+			given(http().get(imageUri)).willReturn(responseOf("type/image.json"));
+			Image image = this.api.pull(reference, this.pullListener, "auth token");
+			assertThat(image.getLayers()).hasSize(46);
+			InOrder ordered = inOrder(this.pullListener);
+			ordered.verify(this.pullListener).onStart();
+			ordered.verify(this.pullListener, times(595)).onUpdate(any());
+			ordered.verify(this.pullListener).onFinish();
+		}
+
+		@Test
+		void pushWhenReferenceIsNullThrowsException() {
+			assertThatIllegalArgumentException().isThrownBy(() -> this.api.push(null, this.pushListener, null))
+					.withMessage("Reference must not be null");
+		}
+
+		@Test
+		void pushWhenListenerIsNullThrowsException() {
+			assertThatIllegalArgumentException()
+					.isThrownBy(() -> this.api.push(ImageReference.of("ubuntu"), null, null))
+					.withMessage("Listener must not be null");
+		}
+
+		@Test
+		void pushPushesImageAndProducesEvents() throws Exception {
+			ImageReference reference = ImageReference.of("localhost:5000/ubuntu");
+			URI pushUri = new URI(IMAGES_URL + "/localhost:5000/ubuntu/push");
+			given(http().post(pushUri, "auth token")).willReturn(responseOf("push-stream.json"));
+			this.api.push(reference, this.pushListener, "auth token");
+			InOrder ordered = inOrder(this.pushListener);
+			ordered.verify(this.pushListener).onStart();
+			ordered.verify(this.pushListener, times(44)).onUpdate(any());
+			ordered.verify(this.pushListener).onFinish();
+		}
+
+		@Test
+		void pushWithErrorInStreamThrowsException() throws Exception {
+			ImageReference reference = ImageReference.of("localhost:5000/ubuntu");
+			URI pushUri = new URI(IMAGES_URL + "/localhost:5000/ubuntu/push");
+			given(http().post(pushUri, "auth token")).willReturn(responseOf("push-stream-with-error.json"));
+			assertThatIllegalStateException()
+					.isThrownBy(() -> this.api.push(reference, this.pushListener, "auth token"))
+					.withMessageContaining("test message");
 		}
 
 		@Test
@@ -170,6 +237,16 @@ class DockerApiTests {
 			ImageArchive archive = mock(ImageArchive.class);
 			assertThatIllegalArgumentException().isThrownBy(() -> this.api.load(archive, null))
 					.withMessage("Listener must not be null");
+		}
+
+		@Test // gh-23130
+		void loadWithEmptyResponseThrowsException() throws Exception {
+			Image image = Image.of(getClass().getResourceAsStream("type/image.json"));
+			ImageArchive archive = ImageArchive.from(image);
+			URI loadUri = new URI(IMAGES_URL + "/load");
+			given(http().post(eq(loadUri), eq("application/x-tar"), any())).willReturn(emptyResponse());
+			assertThatIllegalStateException().isThrownBy(() -> this.api.load(archive, this.loadListener))
+					.withMessageContaining("Invalid response received");
 		}
 
 		@Test
@@ -217,6 +294,60 @@ class DockerApiTests {
 			verify(http()).delete(removeUri);
 		}
 
+		@Test
+		void inspectWhenReferenceIsNullThrowsException() {
+			assertThatIllegalArgumentException().isThrownBy(() -> this.api.inspect(null))
+					.withMessage("Reference must not be null");
+		}
+
+		@Test
+		void inspectInspectImage() throws Exception {
+			ImageReference reference = ImageReference.of("gcr.io/paketo-buildpacks/builder:base");
+			URI imageUri = new URI(IMAGES_URL + "/gcr.io/paketo-buildpacks/builder:base/json");
+			given(http().get(imageUri)).willReturn(responseOf("type/image.json"));
+			Image image = this.api.inspect(reference);
+			assertThat(image.getLayers()).hasSize(46);
+		}
+
+		@Test
+		void exportLayersWhenReferenceIsNullThrowsException() {
+			assertThatIllegalArgumentException().isThrownBy(() -> this.api.exportLayers(null, (name, archive) -> {
+			})).withMessage("Reference must not be null");
+		}
+
+		@Test
+		void exportLayersWhenExportsIsNullThrowsException() {
+			ImageReference reference = ImageReference.of("gcr.io/paketo-buildpacks/builder:base");
+			assertThatIllegalArgumentException().isThrownBy(() -> this.api.exportLayers(reference, null))
+					.withMessage("Exports must not be null");
+		}
+
+		@Test
+		void exportLayersExportsLayerTars() throws Exception {
+			ImageReference reference = ImageReference.of("gcr.io/paketo-buildpacks/builder:base");
+			URI exportUri = new URI(IMAGES_URL + "/gcr.io/paketo-buildpacks/builder:base/get");
+			given(DockerApiTests.this.http.get(exportUri)).willReturn(responseOf("export.tar"));
+			MultiValueMap<String, String> contents = new LinkedMultiValueMap<>();
+			this.api.exportLayers(reference, (name, archive) -> {
+				ByteArrayOutputStream out = new ByteArrayOutputStream();
+				archive.writeTo(out);
+				try (TarArchiveInputStream in = new TarArchiveInputStream(
+						new ByteArrayInputStream(out.toByteArray()))) {
+					TarArchiveEntry entry = in.getNextTarEntry();
+					while (entry != null) {
+						contents.add(name, entry.getName());
+						entry = in.getNextTarEntry();
+					}
+				}
+			});
+			assertThat(contents).hasSize(3).containsKeys(
+					"1bf6c63a1e9ed1dd7cb961273bf60b8e0f440361faf273baf866f408e4910601/layer.tar",
+					"8fdfb915302159a842cbfae6faec5311b00c071ebf14e12da7116ae7532e9319/layer.tar",
+					"93cd584bb189bfca4f51744bd19d836fd36da70710395af5a1523ee88f208c6a/layer.tar");
+			assertThat(contents.get("1bf6c63a1e9ed1dd7cb961273bf60b8e0f440361faf273baf866f408e4910601/layer.tar"))
+					.containsExactly("etc/", "etc/apt/", "etc/apt/sources.list");
+		}
+
 	}
 
 	@Nested
@@ -232,7 +363,6 @@ class DockerApiTests {
 
 		@BeforeEach
 		void setup() {
-			MockitoAnnotations.initMocks(this);
 			this.api = DockerApiTests.this.dockerApi.container();
 		}
 
@@ -251,10 +381,10 @@ class DockerApiTests {
 					.willReturn(responseOf("create-container-response.json"));
 			ContainerReference containerReference = this.api.create(config);
 			assertThat(containerReference.toString()).isEqualTo("e90e34656806");
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			verify(http()).post(any(), any(), this.writer.capture());
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			this.writer.getValue().accept(out);
-			assertThat(out.toByteArray()).hasSizeGreaterThan(130);
+			assertThat(out.toByteArray().length).isEqualTo(config.toString().length());
 		}
 
 		@Test
@@ -273,10 +403,10 @@ class DockerApiTests {
 			given(http().put(eq(uploadUri), eq("application/x-tar"), any())).willReturn(emptyResponse());
 			ContainerReference containerReference = this.api.create(config, content);
 			assertThat(containerReference.toString()).isEqualTo("e90e34656806");
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			verify(http()).post(any(), any(), this.writer.capture());
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			this.writer.getValue().accept(out);
-			assertThat(out.toByteArray()).hasSizeGreaterThan(130);
+			assertThat(out.toByteArray().length).isEqualTo(config.toString().length());
 			verify(http()).put(any(), any(), this.writer.capture());
 			this.writer.getValue().accept(out);
 			assertThat(out.toByteArray()).hasSizeGreaterThan(2000);
@@ -370,7 +500,6 @@ class DockerApiTests {
 
 		@BeforeEach
 		void setup() {
-			MockitoAnnotations.initMocks(this);
 			this.api = DockerApiTests.this.dockerApi.volume();
 		}
 

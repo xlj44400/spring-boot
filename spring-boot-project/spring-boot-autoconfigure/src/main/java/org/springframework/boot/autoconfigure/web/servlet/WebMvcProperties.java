@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
+import org.springframework.boot.context.properties.IncompatibleConfigurationException;
 import org.springframework.http.MediaType;
 import org.springframework.util.Assert;
 import org.springframework.validation.DefaultMessageCodesResolver;
@@ -120,6 +121,8 @@ public class WebMvcProperties {
 		this.messageCodesResolverFormat = messageCodesResolverFormat;
 	}
 
+	@Deprecated
+	@DeprecatedConfigurationProperty(replacement = "spring.web.locale")
 	public Locale getLocale() {
 		return this.locale;
 	}
@@ -128,6 +131,8 @@ public class WebMvcProperties {
 		this.locale = locale;
 	}
 
+	@Deprecated
+	@DeprecatedConfigurationProperty(replacement = "spring.web.locale-resolver")
 	public LocaleResolver getLocaleResolver() {
 		return this.localeResolver;
 	}
@@ -235,6 +240,24 @@ public class WebMvcProperties {
 		return this.pathmatch;
 	}
 
+	@SuppressWarnings("deprecation")
+	public void checkConfiguration() {
+		if (this.getPathmatch().getMatchingStrategy() == MatchingStrategy.PATH_PATTERN_PARSER) {
+			if (this.getPathmatch().isUseSuffixPattern()) {
+				throw new IncompatibleConfigurationException("spring.mvc.pathmatch.matching-strategy",
+						"spring.mvc.pathmatch.use-suffix-pattern");
+			}
+			if (this.getPathmatch().isUseRegisteredSuffixPattern()) {
+				throw new IncompatibleConfigurationException("spring.mvc.pathmatch.matching-strategy",
+						"spring.mvc.pathmatch.use-registered-suffix-pattern");
+			}
+			if (!this.getServlet().getServletMapping().equals("/")) {
+				throw new IncompatibleConfigurationException("spring.mvc.pathmatch.matching-strategy",
+						"spring.mvc.servlet.path");
+			}
+		}
+	}
+
 	public static class Async {
 
 		/**
@@ -256,7 +279,8 @@ public class WebMvcProperties {
 	public static class Servlet {
 
 		/**
-		 * Path of the dispatcher servlet.
+		 * Path of the dispatcher servlet. Setting a custom value for this property is not
+		 * compatible with the PathPatternParser matching strategy.
 		 */
 		private String path = "/";
 
@@ -412,8 +436,14 @@ public class WebMvcProperties {
 	public static class Pathmatch {
 
 		/**
+		 * Choice of strategy for matching request paths against registered mappings.
+		 */
+		private MatchingStrategy matchingStrategy = MatchingStrategy.ANT_PATH_MATCHER;
+
+		/**
 		 * Whether to use suffix pattern match (".*") when matching patterns to requests.
-		 * If enabled a method mapped to "/users" also matches to "/users.*".
+		 * If enabled a method mapped to "/users" also matches to "/users.*". Enabling
+		 * this option is not compatible with the PathPatternParser matching strategy.
 		 */
 		private boolean useSuffixPattern = false;
 
@@ -421,9 +451,18 @@ public class WebMvcProperties {
 		 * Whether suffix pattern matching should work only against extensions registered
 		 * with "spring.mvc.contentnegotiation.media-types.*". This is generally
 		 * recommended to reduce ambiguity and to avoid issues such as when a "." appears
-		 * in the path for other reasons.
+		 * in the path for other reasons. Enabling this option is not compatible with the
+		 * PathPatternParser matching strategy.
 		 */
 		private boolean useRegisteredSuffixPattern = false;
+
+		public MatchingStrategy getMatchingStrategy() {
+			return this.matchingStrategy;
+		}
+
+		public void setMatchingStrategy(MatchingStrategy matchingStrategy) {
+			this.matchingStrategy = matchingStrategy;
+		}
 
 		@DeprecatedConfigurationProperty(
 				reason = "Use of path extensions for request mapping and for content negotiation is discouraged.")
@@ -494,6 +533,30 @@ public class WebMvcProperties {
 
 	}
 
+	/**
+	 * Matching strategy options.
+	 * @since 2.4.0
+	 */
+	public enum MatchingStrategy {
+
+		/**
+		 * Use the {@code AntPathMatcher} implementation.
+		 */
+		ANT_PATH_MATCHER,
+
+		/**
+		 * Use the {@code PathPatternParser} implementation.
+		 */
+		PATH_PATTERN_PARSER
+
+	}
+
+	/**
+	 * Locale resolution options.
+	 * @deprecated since 2.4.0 in favor of
+	 * {@link org.springframework.boot.autoconfigure.web.WebProperties.LocaleResolver}
+	 */
+	@Deprecated
 	public enum LocaleResolver {
 
 		/**

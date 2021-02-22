@@ -40,6 +40,7 @@ import com.typesafe.config.ConfigFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.cassandra.CassandraProperties.Connection;
+import org.springframework.boot.autoconfigure.cassandra.CassandraProperties.Controlconnection;
 import org.springframework.boot.autoconfigure.cassandra.CassandraProperties.Request;
 import org.springframework.boot.autoconfigure.cassandra.CassandraProperties.Throttler;
 import org.springframework.boot.autoconfigure.cassandra.CassandraProperties.ThrottlerType;
@@ -127,6 +128,7 @@ public class CassandraAutoConfiguration {
 		mapConnectionOptions(properties, options);
 		mapPoolingOptions(properties, options);
 		mapRequestOptions(properties, options);
+		mapControlConnectionOptions(properties, options);
 		map.from(mapContactPoints(properties))
 				.to((contactPoints) -> options.add(DefaultDriverOption.CONTACT_POINTS, contactPoints));
 		map.from(properties.getLocalDatacenter()).to(
@@ -146,11 +148,11 @@ public class CassandraAutoConfiguration {
 	}
 
 	private void mapPoolingOptions(CassandraProperties properties, CassandraDriverOptions options) {
-		PropertyMapper map = PropertyMapper.get();
+		PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
 		CassandraProperties.Pool poolProperties = properties.getPool();
-		map.from(poolProperties::getIdleTimeout).whenNonNull().asInt(Duration::getSeconds)
+		map.from(poolProperties::getIdleTimeout).asInt(Duration::toMillis)
 				.to((idleTimeout) -> options.add(DefaultDriverOption.HEARTBEAT_TIMEOUT, idleTimeout));
-		map.from(poolProperties::getHeartbeatInterval).whenNonNull().asInt(Duration::getSeconds)
+		map.from(poolProperties::getHeartbeatInterval).asInt(Duration::toMillis)
 				.to((heartBeatInterval) -> options.add(DefaultDriverOption.HEARTBEAT_INTERVAL, heartBeatInterval));
 	}
 
@@ -176,6 +178,13 @@ public class CassandraAutoConfiguration {
 				.add(DefaultDriverOption.REQUEST_THROTTLER_MAX_REQUESTS_PER_SECOND, maxRequestsPerSecond));
 		map.from(throttlerProperties::getDrainInterval).asInt(Duration::toMillis).to(
 				(drainInterval) -> options.add(DefaultDriverOption.REQUEST_THROTTLER_DRAIN_INTERVAL, drainInterval));
+	}
+
+	private void mapControlConnectionOptions(CassandraProperties properties, CassandraDriverOptions options) {
+		PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
+		Controlconnection controlProperties = properties.getControlconnection();
+		map.from(controlProperties::getTimeout).asInt(Duration::toMillis)
+				.to((timeout) -> options.add(DefaultDriverOption.CONTROL_CONNECTION_TIMEOUT, timeout));
 	}
 
 	private List<String> mapContactPoints(CassandraProperties properties) {

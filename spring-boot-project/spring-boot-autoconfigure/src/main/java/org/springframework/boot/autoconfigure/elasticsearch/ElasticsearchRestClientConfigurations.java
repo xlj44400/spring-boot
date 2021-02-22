@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,22 +30,22 @@ import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.sniff.Sniffer;
+import org.elasticsearch.client.sniff.SnifferBuilder;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
 /**
- * Elasticsearch rest client infrastructure configurations.
+ * Elasticsearch rest client configurations.
  *
- * @author Brian Clozel
  * @author Stephane Nicoll
- * @author Vedran Pavic
- * @author Evgeniy Cheban
  */
 class ElasticsearchRestClientConfigurations {
 
@@ -100,34 +100,30 @@ class ElasticsearchRestClientConfigurations {
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnClass(RestHighLevelClient.class)
+	@ConditionalOnMissingBean(RestHighLevelClient.class)
 	static class RestHighLevelClientConfiguration {
 
 		@Bean
-		@ConditionalOnMissingBean
 		RestHighLevelClient elasticsearchRestHighLevelClient(RestClientBuilder restClientBuilder) {
 			return new RestHighLevelClient(restClientBuilder);
-		}
-
-		@Bean
-		@ConditionalOnMissingBean
-		RestClient elasticsearchRestClient(RestClientBuilder builder,
-				ObjectProvider<RestHighLevelClient> restHighLevelClient) {
-			RestHighLevelClient client = restHighLevelClient.getIfUnique();
-			if (client != null) {
-				return client.getLowLevelClient();
-			}
-			return builder.build();
 		}
 
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	static class RestClientFallbackConfiguration {
+	@ConditionalOnClass(Sniffer.class)
+	@ConditionalOnSingleCandidate(RestHighLevelClient.class)
+	static class RestClientSnifferConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean
-		RestClient elasticsearchRestClient(RestClientBuilder builder) {
+		Sniffer elasticsearchSniffer(RestHighLevelClient client, ElasticsearchRestClientProperties properties) {
+			SnifferBuilder builder = Sniffer.builder(client.getLowLevelClient());
+			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
+			map.from(properties.getSniffer().getInterval()).asInt(Duration::toMillis)
+					.to(builder::setSniffIntervalMillis);
+			map.from(properties.getSniffer().getDelayAfterFailure()).asInt(Duration::toMillis)
+					.to(builder::setSniffAfterFailureDelayMillis);
 			return builder.build();
 		}
 

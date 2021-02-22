@@ -18,7 +18,7 @@ See _<<getting-started.adoc#getting-started-installing-the-cli>>_ in the "`Getti
 [[cli-using-the-cli]]
 == Using the CLI
 Once you have installed the CLI, you can run it by typing `spring` and pressing Enter at the command line.
-If you run `spring` without any arguments, a simple help screen is displayed, as follows:
+If you run `spring` without any arguments, a help screen is displayed, as follows:
 
 [indent=0,subs="verbatim,quotes,attributes"]
 ----
@@ -209,7 +209,7 @@ The preceding declaration picks up `custom-bom-1.0.0.pom` in a Maven repository 
 
 When you specify multiple BOMs, they are applied in the order in which you declare them, as shown in the following example:
 
-[source,java,indent=0]
+[source,java,pending-extract=true,indent=0]
 ----
 	@DependencyManagementBom(["com.example.custom-bom:1.0.0",
 			"com.example.another-bom:1.0.0"])

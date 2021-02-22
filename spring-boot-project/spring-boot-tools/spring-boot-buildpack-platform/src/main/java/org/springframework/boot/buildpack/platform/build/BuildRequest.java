@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@
 package org.springframework.boot.buildpack.platform.build;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -32,11 +34,12 @@ import org.springframework.util.Assert;
  *
  * @author Phillip Webb
  * @author Scott Frederick
+ * @author Andrey Shlykov
  * @since 2.3.0
  */
 public class BuildRequest {
 
-	static final String DEFAULT_BUILDER_IMAGE_NAME = "gcr.io/paketo-buildpacks/builder:base-platform-api-0.3";
+	static final String DEFAULT_BUILDER_IMAGE_NAME = "paketobuildpacks/builder:base";
 
 	private static final ImageReference DEFAULT_BUILDER = ImageReference.of(DEFAULT_BUILDER_IMAGE_NAME);
 
@@ -56,6 +59,12 @@ public class BuildRequest {
 
 	private final boolean verboseLogging;
 
+	private final PullPolicy pullPolicy;
+
+	private final boolean publish;
+
+	private final List<BuildpackReference> buildpacks;
+
 	BuildRequest(ImageReference name, Function<Owner, TarArchive> applicationContent) {
 		Assert.notNull(name, "Name must not be null");
 		Assert.notNull(applicationContent, "ApplicationContent must not be null");
@@ -66,12 +75,15 @@ public class BuildRequest {
 		this.env = Collections.emptyMap();
 		this.cleanCache = false;
 		this.verboseLogging = false;
+		this.pullPolicy = PullPolicy.ALWAYS;
+		this.publish = false;
 		this.creator = Creator.withVersion("");
+		this.buildpacks = Collections.emptyList();
 	}
 
 	BuildRequest(ImageReference name, Function<Owner, TarArchive> applicationContent, ImageReference builder,
 			ImageReference runImage, Creator creator, Map<String, String> env, boolean cleanCache,
-			boolean verboseLogging) {
+			boolean verboseLogging, PullPolicy pullPolicy, boolean publish, List<BuildpackReference> buildpacks) {
 		this.name = name;
 		this.applicationContent = applicationContent;
 		this.builder = builder;
@@ -80,6 +92,9 @@ public class BuildRequest {
 		this.env = env;
 		this.cleanCache = cleanCache;
 		this.verboseLogging = verboseLogging;
+		this.pullPolicy = pullPolicy;
+		this.publish = publish;
+		this.buildpacks = buildpacks;
 	}
 
 	/**
@@ -90,7 +105,8 @@ public class BuildRequest {
 	public BuildRequest withBuilder(ImageReference builder) {
 		Assert.notNull(builder, "Builder must not be null");
 		return new BuildRequest(this.name, this.applicationContent, builder.inTaggedOrDigestForm(), this.runImage,
-				this.creator, this.env, this.cleanCache, this.verboseLogging);
+				this.creator, this.env, this.cleanCache, this.verboseLogging, this.pullPolicy, this.publish,
+				this.buildpacks);
 	}
 
 	/**
@@ -100,7 +116,8 @@ public class BuildRequest {
 	 */
 	public BuildRequest withRunImage(ImageReference runImageName) {
 		return new BuildRequest(this.name, this.applicationContent, this.builder, runImageName.inTaggedOrDigestForm(),
-				this.creator, this.env, this.cleanCache, this.verboseLogging);
+				this.creator, this.env, this.cleanCache, this.verboseLogging, this.pullPolicy, this.publish,
+				this.buildpacks);
 	}
 
 	/**
@@ -111,7 +128,7 @@ public class BuildRequest {
 	public BuildRequest withCreator(Creator creator) {
 		Assert.notNull(creator, "Creator must not be null");
 		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, creator, this.env,
-				this.cleanCache, this.verboseLogging);
+				this.cleanCache, this.verboseLogging, this.pullPolicy, this.publish, this.buildpacks);
 	}
 
 	/**
@@ -126,7 +143,8 @@ public class BuildRequest {
 		Map<String, String> env = new LinkedHashMap<>(this.env);
 		env.put(name, value);
 		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator,
-				Collections.unmodifiableMap(env), this.cleanCache, this.verboseLogging);
+				Collections.unmodifiableMap(env), this.cleanCache, this.verboseLogging, this.pullPolicy, this.publish,
+				this.buildpacks);
 	}
 
 	/**
@@ -139,7 +157,8 @@ public class BuildRequest {
 		Map<String, String> updatedEnv = new LinkedHashMap<>(this.env);
 		updatedEnv.putAll(env);
 		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator,
-				Collections.unmodifiableMap(updatedEnv), this.cleanCache, this.verboseLogging);
+				Collections.unmodifiableMap(updatedEnv), this.cleanCache, this.verboseLogging, this.pullPolicy,
+				this.publish, this.buildpacks);
 	}
 
 	/**
@@ -149,7 +168,7 @@ public class BuildRequest {
 	 */
 	public BuildRequest withCleanCache(boolean cleanCache) {
 		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator, this.env,
-				cleanCache, this.verboseLogging);
+				cleanCache, this.verboseLogging, this.pullPolicy, this.publish, this.buildpacks);
 	}
 
 	/**
@@ -159,7 +178,48 @@ public class BuildRequest {
 	 */
 	public BuildRequest withVerboseLogging(boolean verboseLogging) {
 		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator, this.env,
-				this.cleanCache, verboseLogging);
+				this.cleanCache, verboseLogging, this.pullPolicy, this.publish, this.buildpacks);
+	}
+
+	/**
+	 * Return a new {@link BuildRequest} with the updated image pull policy.
+	 * @param pullPolicy image pull policy {@link PullPolicy}
+	 * @return an updated build request
+	 */
+	public BuildRequest withPullPolicy(PullPolicy pullPolicy) {
+		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator, this.env,
+				this.cleanCache, this.verboseLogging, pullPolicy, this.publish, this.buildpacks);
+	}
+
+	/**
+	 * Return a new {@link BuildRequest} with an updated publish setting.
+	 * @param publish if the built image should be pushed to a registry
+	 * @return an updated build request
+	 */
+	public BuildRequest withPublish(boolean publish) {
+		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator, this.env,
+				this.cleanCache, this.verboseLogging, this.pullPolicy, publish, this.buildpacks);
+	}
+
+	/**
+	 * Return a new {@link BuildRequest} with an updated buildpacks setting.
+	 * @param buildpacks a collection of buildpacks to use when building the image
+	 * @return an updated build request
+	 */
+	public BuildRequest withBuildpacks(BuildpackReference... buildpacks) {
+		Assert.notEmpty(buildpacks, "Buildpacks must not be empty");
+		return withBuildpacks(Arrays.asList(buildpacks));
+	}
+
+	/**
+	 * Return a new {@link BuildRequest} with an updated buildpacks setting.
+	 * @param buildpacks a collection of buildpacks to use when building the image
+	 * @return an updated build request
+	 */
+	public BuildRequest withBuildpacks(List<BuildpackReference> buildpacks) {
+		Assert.notNull(buildpacks, "Buildpacks must not be null");
+		return new BuildRequest(this.name, this.applicationContent, this.builder, this.runImage, this.creator, this.env,
+				this.cleanCache, this.verboseLogging, this.pullPolicy, this.publish, buildpacks);
 	}
 
 	/**
@@ -227,6 +287,30 @@ public class BuildRequest {
 	 */
 	public boolean isVerboseLogging() {
 		return this.verboseLogging;
+	}
+
+	/**
+	 * Return if the built image should be pushed to a registry.
+	 * @return if the built image should be pushed to a registry
+	 */
+	public boolean isPublish() {
+		return this.publish;
+	}
+
+	/**
+	 * Return the image {@link PullPolicy} that the builder should use.
+	 * @return image pull policy
+	 */
+	public PullPolicy getPullPolicy() {
+		return this.pullPolicy;
+	}
+
+	/**
+	 * Return the collection of buildpacks to use when building the image, if provided.
+	 * @return the collection of buildpacks
+	 */
+	public List<BuildpackReference> getBuildpacks() {
+		return this.buildpacks;
 	}
 
 	/**

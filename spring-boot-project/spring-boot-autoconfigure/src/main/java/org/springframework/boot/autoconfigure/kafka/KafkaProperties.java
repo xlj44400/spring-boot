@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -685,6 +685,8 @@ public class KafkaProperties {
 
 		private final Security security = new Security();
 
+		private final Cleanup cleanup = new Cleanup();
+
 		/**
 		 * Kafka streams application.id property; default spring.application.name.
 		 */
@@ -733,6 +735,10 @@ public class KafkaProperties {
 
 		public Security getSecurity() {
 			return this.security;
+		}
+
+		public Cleanup getCleanup() {
+			return this.cleanup;
 		}
 
 		public String getApplicationId() {
@@ -886,6 +892,11 @@ public class KafkaProperties {
 		private Duration ackTime;
 
 		/**
+		 * Sleep interval between Consumer.poll(Duration) calls.
+		 */
+		private Duration idleBetweenPolls = Duration.ZERO;
+
+		/**
 		 * Time between publishing idle consumer events (no data received).
 		 */
 		private Duration idleEventInterval;
@@ -901,6 +912,12 @@ public class KafkaProperties {
 		 * Whether to log the container configuration during initialization (INFO level).
 		 */
 		private Boolean logContainerConfig;
+
+		/**
+		 * Whether to suppress the entire record from being written to the log when
+		 * retries are being attempted.
+		 */
+		private boolean onlyLogRecordMetadata = true;
 
 		/**
 		 * Whether the container should fail to start if at least one of the configured
@@ -972,6 +989,14 @@ public class KafkaProperties {
 			this.ackTime = ackTime;
 		}
 
+		public Duration getIdleBetweenPolls() {
+			return this.idleBetweenPolls;
+		}
+
+		public void setIdleBetweenPolls(Duration idleBetweenPolls) {
+			this.idleBetweenPolls = idleBetweenPolls;
+		}
+
 		public Duration getIdleEventInterval() {
 			return this.idleEventInterval;
 		}
@@ -994,6 +1019,14 @@ public class KafkaProperties {
 
 		public void setLogContainerConfig(Boolean logContainerConfig) {
 			this.logContainerConfig = logContainerConfig;
+		}
+
+		public boolean isOnlyLogRecordMetadata() {
+			return this.onlyLogRecordMetadata;
+		}
+
+		public void setOnlyLogRecordMetadata(boolean onlyLogRecordMetadata) {
+			this.onlyLogRecordMetadata = onlyLogRecordMetadata;
 		}
 
 		public boolean isMissingTopicsFatal() {
@@ -1217,6 +1250,36 @@ public class KafkaProperties {
 			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
 			map.from(this::getProtocol).to(properties.in(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG));
 			return properties;
+		}
+
+	}
+
+	public static class Cleanup {
+
+		/**
+		 * Cleanup the application’s local state directory on startup.
+		 */
+		private boolean onStartup = false;
+
+		/**
+		 * Cleanup the application’s local state directory on shutdown.
+		 */
+		private boolean onShutdown = true;
+
+		public boolean isOnStartup() {
+			return this.onStartup;
+		}
+
+		public void setOnStartup(boolean onStartup) {
+			this.onStartup = onStartup;
+		}
+
+		public boolean isOnShutdown() {
+			return this.onShutdown;
+		}
+
+		public void setOnShutdown(boolean onShutdown) {
+			this.onShutdown = onShutdown;
 		}
 
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarInputStream;
@@ -60,6 +61,20 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 
 	private final Set<String> writtenEntries = new HashSet<>();
 
+	private Layers layers;
+
+	private LayersIndex layersIndex;
+
+	/**
+	 * Update this writer to use specific layers.
+	 * @param layers the layers to use
+	 * @param layersIndex the layers index to update
+	 */
+	void useLayers(Layers layers, LayersIndex layersIndex) {
+		this.layers = layers;
+		this.layersIndex = layersIndex;
+	}
+
 	/**
 	 * Write the specified manifest.
 	 * @param manifest the manifest to write
@@ -76,11 +91,11 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 	 * @throws IOException if the entries cannot be written
 	 */
 	public void writeEntries(JarFile jarFile) throws IOException {
-		writeEntries(jarFile, EntryTransformer.NONE, UnpackHandler.NEVER);
+		writeEntries(jarFile, EntryTransformer.NONE, UnpackHandler.NEVER, (name) -> false);
 	}
 
-	final void writeEntries(JarFile jarFile, EntryTransformer entryTransformer, UnpackHandler unpackHandler)
-			throws IOException {
+	final void writeEntries(JarFile jarFile, EntryTransformer entryTransformer, UnpackHandler unpackHandler,
+			Predicate<String> libraryPredicate) throws IOException {
 		Enumeration<JarEntry> entries = jarFile.entries();
 		while (entries.hasMoreElements()) {
 			JarArchiveEntry entry = new JarArchiveEntry(entries.nextElement());
@@ -89,7 +104,8 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 				EntryWriter entryWriter = new InputStreamEntryWriter(inputStream);
 				JarArchiveEntry transformedEntry = entryTransformer.transform(entry);
 				if (transformedEntry != null) {
-					writeEntry(transformedEntry, entryWriter, unpackHandler);
+					boolean updateLayerIndex = !libraryPredicate.test(entry.getName());
+					writeEntry(transformedEntry, entryWriter, unpackHandler, updateLayerIndex);
 				}
 			}
 		}
@@ -144,7 +160,15 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 		entry.setTime(getNestedLibraryTime(library));
 		new CrcAndSize(library::openStream).setupStoredEntry(entry);
 		try (InputStream inputStream = library.openStream()) {
-			writeEntry(entry, new InputStreamEntryWriter(inputStream), new LibraryUnpackHandler(library));
+			writeEntry(entry, new InputStreamEntryWriter(inputStream), new LibraryUnpackHandler(library), false);
+			updateLayerIndex(entry.getName(), library);
+		}
+	}
+
+	private void updateLayerIndex(String name, Library library) {
+		if (this.layers != null) {
+			Layer layer = this.layers.getLayer(library);
+			this.layersIndex.add(layer, name);
 		}
 	}
 
@@ -225,7 +249,7 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 	}
 
 	private void writeEntry(JarArchiveEntry entry, EntryWriter entryWriter) throws IOException {
-		writeEntry(entry, entryWriter, UnpackHandler.NEVER);
+		writeEntry(entry, entryWriter, UnpackHandler.NEVER, true);
 	}
 
 	/**
@@ -234,10 +258,11 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 	 * @param entry the entry to write
 	 * @param entryWriter the entry writer or {@code null} if there is no content
 	 * @param unpackHandler handles possible unpacking for the entry
+	 * @param updateLayerIndex if the layer index should be updated
 	 * @throws IOException in case of I/O errors
 	 */
-	private void writeEntry(JarArchiveEntry entry, EntryWriter entryWriter, UnpackHandler unpackHandler)
-			throws IOException {
+	private void writeEntry(JarArchiveEntry entry, EntryWriter entryWriter, UnpackHandler unpackHandler,
+			boolean updateLayerIndex) throws IOException {
 		String name = entry.getName();
 		writeParentDirectoryEntries(name);
 		if (this.writtenEntries.add(name)) {
@@ -248,7 +273,17 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 				entry.setSize(entryWriter.size());
 			}
 			entryWriter = addUnpackCommentIfNecessary(entry, entryWriter, unpackHandler);
+			if (updateLayerIndex) {
+				updateLayerIndex(entry);
+			}
 			writeToArchive(entry, entryWriter);
+		}
+	}
+
+	private void updateLayerIndex(JarArchiveEntry entry) {
+		if (this.layers != null && !entry.getName().endsWith("/")) {
+			Layer layer = this.layers.getLayer(entry.getName());
+			this.layersIndex.add(layer, entry.getName());
 		}
 	}
 
@@ -259,7 +294,7 @@ public abstract class AbstractJarWriter implements LoaderClassesWriter {
 		while (parent.lastIndexOf('/') != -1) {
 			parent = parent.substring(0, parent.lastIndexOf('/'));
 			if (!parent.isEmpty()) {
-				writeEntry(new JarArchiveEntry(parent + "/"), null, UnpackHandler.NEVER);
+				writeEntry(new JarArchiveEntry(parent + "/"), null, UnpackHandler.NEVER, false);
 			}
 		}
 	}

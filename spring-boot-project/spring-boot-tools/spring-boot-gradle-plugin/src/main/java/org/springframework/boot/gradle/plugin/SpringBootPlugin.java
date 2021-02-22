@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ package org.springframework.boot.gradle.plugin;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
-import org.gradle.api.artifacts.ResolvableDependencies;
 import org.gradle.util.GradleVersion;
 
 import org.springframework.boot.gradle.dsl.SpringBootExtension;
@@ -91,7 +91,6 @@ public class SpringBootPlugin implements Plugin<Project> {
 		createExtension(project);
 		Configuration bootArchives = createBootArchivesConfiguration(project);
 		registerPluginActions(project, bootArchives);
-		unregisterUnresolvedDependenciesAnalyzer(project);
 	}
 
 	private void verifyGradleVersion() {
@@ -111,34 +110,30 @@ public class SpringBootPlugin implements Plugin<Project> {
 	private Configuration createBootArchivesConfiguration(Project project) {
 		Configuration bootArchives = project.getConfigurations().create(BOOT_ARCHIVES_CONFIGURATION_NAME);
 		bootArchives.setDescription("Configuration for Spring Boot archive artifacts.");
+		bootArchives.setCanBeResolved(false);
 		return bootArchives;
 	}
 
 	private void registerPluginActions(Project project, Configuration bootArchives) {
 		SinglePublishedArtifact singlePublishedArtifact = new SinglePublishedArtifact(bootArchives.getArtifacts());
+		@SuppressWarnings("deprecation")
 		List<PluginApplicationAction> actions = Arrays.asList(new JavaPluginAction(singlePublishedArtifact),
 				new WarPluginAction(singlePublishedArtifact), new MavenPluginAction(bootArchives.getUploadTaskName()),
 				new DependencyManagementPluginAction(), new ApplicationPluginAction(), new KotlinPluginAction());
 		for (PluginApplicationAction action : actions) {
-			Class<? extends Plugin<? extends Project>> pluginClass = action.getPluginClass();
-			if (pluginClass != null) {
-				project.getPlugins().withType(pluginClass, (plugin) -> action.execute(project));
-			}
+			withPluginClassOfAction(action,
+					(pluginClass) -> project.getPlugins().withType(pluginClass, (plugin) -> action.execute(project)));
 		}
 	}
 
-	private void unregisterUnresolvedDependenciesAnalyzer(Project project) {
-		UnresolvedDependenciesAnalyzer unresolvedDependenciesAnalyzer = new UnresolvedDependenciesAnalyzer();
-		project.getConfigurations().all((configuration) -> {
-			ResolvableDependencies incoming = configuration.getIncoming();
-			incoming.afterResolve((resolvableDependencies) -> {
-				if (incoming.equals(resolvableDependencies)) {
-					unresolvedDependenciesAnalyzer.analyze(configuration.getResolvedConfiguration()
-							.getLenientConfiguration().getUnresolvedModuleDependencies());
-				}
-			});
-		});
-		project.getGradle().buildFinished((buildResult) -> unresolvedDependenciesAnalyzer.buildFinished(project));
+	private void withPluginClassOfAction(PluginApplicationAction action,
+			Consumer<Class<? extends Plugin<? extends Project>>> consumer) {
+		try {
+			consumer.accept(action.getPluginClass());
+		}
+		catch (Throwable ex) {
+			// Plugin class unavailable. Continue.
+		}
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySource;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 import org.springframework.security.saml2.provider.service.registration.Saml2MessageBinding;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,16 +38,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class Saml2RelyingPartyPropertiesTests {
 
 	private final Saml2RelyingPartyProperties properties = new Saml2RelyingPartyProperties();
-
-	@Deprecated
-	@Test
-	void customizeSsoUrlDeprecated() {
-		bind("spring.security.saml2.relyingparty.registration.simplesamlphp.identity-provider.sso-url",
-				"https://simplesaml-for-spring-saml/SSOService.php");
-		assertThat(
-				this.properties.getRegistration().get("simplesamlphp").getIdentityprovider().getSinglesignon().getUrl())
-						.isEqualTo("https://simplesaml-for-spring-saml/SSOService.php");
-	}
 
 	@Test
 	void customizeSsoUrl() {
@@ -85,6 +76,28 @@ class Saml2RelyingPartyPropertiesTests {
 		this.properties.getRegistration().put("simplesamlphp", new Saml2RelyingPartyProperties.Registration());
 		assertThat(this.properties.getRegistration().get("simplesamlphp").getIdentityprovider().getSinglesignon()
 				.isSignRequest()).isEqualTo(true);
+	}
+
+	@Test
+	void customizeRelyingPartyEntityId() {
+		bind("spring.security.saml2.relyingparty.registration.simplesamlphp.entity-id",
+				"{baseUrl}/saml2/custom-entity-id");
+		assertThat(this.properties.getRegistration().get("simplesamlphp").getEntityId())
+				.isEqualTo("{baseUrl}/saml2/custom-entity-id");
+	}
+
+	@Test
+	void customizeRelyingPartyEntityIdDefaultsToServiceProviderMetadata() {
+		assertThat(RelyingPartyRegistration.withRegistrationId("id")).extracting("entityId")
+				.isEqualTo(new Saml2RelyingPartyProperties.Registration().getEntityId());
+	}
+
+	@Test
+	void customizeIdentityProviderMetadataUri() {
+		bind("spring.security.saml2.relyingparty.registration.simplesamlphp.identityprovider.metadata-uri",
+				"https://idp.example.org/metadata");
+		assertThat(this.properties.getRegistration().get("simplesamlphp").getIdentityprovider().getMetadataUri())
+				.isEqualTo("https://idp.example.org/metadata");
 	}
 
 	private void bind(String name, String value) {

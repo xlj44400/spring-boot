@@ -17,9 +17,14 @@
 package org.springframework.boot.autoconfigure.elasticsearch;
 
 import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
 
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientConfigurations.RestClientBuilderConfiguration;
+import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientConfigurations.RestClientSnifferConfiguration;
+import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientConfigurations.RestHighLevelClientConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -32,11 +37,11 @@ import org.springframework.context.annotation.Import;
  * @since 2.1.0
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(RestClient.class)
+@ConditionalOnClass(RestHighLevelClient.class)
+@ConditionalOnMissingBean(RestClient.class)
 @EnableConfigurationProperties(ElasticsearchRestClientProperties.class)
-@Import({ ElasticsearchRestClientConfigurations.RestClientBuilderConfiguration.class,
-		ElasticsearchRestClientConfigurations.RestHighLevelClientConfiguration.class,
-		ElasticsearchRestClientConfigurations.RestClientFallbackConfiguration.class })
+@Import({ RestClientBuilderConfiguration.class, RestHighLevelClientConfiguration.class,
+		RestClientSnifferConfiguration.class })
 public class ElasticsearchRestClientAutoConfiguration {
 
 }
